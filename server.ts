@@ -23,7 +23,7 @@ import internalAutomationRoutes from './src/server/routes/internalAutomation';
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = parseInt(process.env.PORT || '3000', 10);
 
   // Trust proxy for reverse proxy / Cloud Run IP rate limiting
   app.set('trust proxy', 1);

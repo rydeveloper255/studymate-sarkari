@@ -1,0 +1,48 @@
+# StudyMate Sarkari — Render Infrastructure Blueprint Configuration (render.yaml)
+# Production Deployment configuration for Render.com
+
+services:
+  # Primary Full-Stack Web Service (Express + Vite Server)
+  - type: web
+    name: studymate-sarkari-web
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SOURCE_FETCH_SECRET
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_DEFAULT_CHAT_ID
+        sync: false
+      - key: TELEGRAM_NOTIFICATIONS_ENABLED
+        value: "false"
+      - key: TELEGRAM_DRY_RUN
+        value: "true"
+
+  # Scheduled Cron Job for Automated Source Monitoring & Fetch Dispatcher
+  - type: cron
+    name: studymate-sarkari-cron
+    env: node
+    plan: starter
+    schedule: "*/15 * * * *"
+    buildCommand: npm install && npm run build
+    startCommand: node -e 'fetch((process.env.WEB_SERVICE_URL || "http://localhost:3000") + "/api/internal/scheduler/fetch-due", { method: "POST", headers: { "Authorization": "Bearer " + (process.env.SOURCE_FETCH_SECRET || "studymate-internal-dev-secret"), "Content-Type": "application/json" } }).then(r => r.json()).then(d => { console.log("[Cron Dispatcher] Success:", JSON.stringify(d)); }).catch(e => { console.error("[Cron Dispatcher] Error:", e); process.exit(1); })'
+    envVars:
+      - key: WEB_SERVICE_URL
+        sync: false
+      - key: SOURCE_FETCH_SECRET
+        sync: false
