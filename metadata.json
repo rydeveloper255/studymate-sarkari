@@ -1,0 +1,6 @@
+{
+  "name": "StudyMate Sarkari",
+  "description": "Government Jobs, Results & Exam Updates. Central and State Government vacancies, admit cards, results, and important recruitment notifications.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
