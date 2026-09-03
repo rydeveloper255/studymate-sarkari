@@ -14,6 +14,7 @@ import {
   VerificationStatus,
   ExtractionConfidence,
 } from '../../../types';
+import { validatePublicationDateCutoff } from '../verification/dateValidator';
 
 export interface EligibilityResult {
   eligible: boolean;
@@ -97,6 +98,24 @@ export function isPublishableJob(
     };
   }
 
+  // 5. Strict Date Cutoff: ONLY PROCESS NEWLY PUBLISHED SOURCE CONTENT DATED 1 AUGUST 2026 OR LATER
+  const candidateDate =
+    payload.importantDates?.notificationDate ||
+    payload.importantDates?.applyStartDate ||
+    (payload as any).publishedDate ||
+    (payload as any).published_date;
+  const dateCheck = validatePublicationDateCutoff(candidateDate, {
+    title: payload.title,
+    itemType: payload.itemType,
+  });
+
+  if (!dateCheck.eligible) {
+    return {
+      eligible: false,
+      reason: dateCheck.reason || 'Publication date is before 1 August 2026 cutoff.',
+    };
+  }
+
   return { eligible: true };
 }
 
@@ -159,6 +178,24 @@ export function isPublishableUpdate(
     return {
       eligible: false,
       reason: 'No official or source URL provided.',
+    };
+  }
+
+  // 5. Strict Date Cutoff: ONLY PROCESS NEWLY PUBLISHED SOURCE CONTENT DATED 1 AUGUST 2026 OR LATER
+  const updateCandidateDate =
+    payload.importantDates?.notificationDate ||
+    (payload as any).releaseDate ||
+    (payload as any).updateDate ||
+    (payload as any).update_date;
+  const updateDateCheck = validatePublicationDateCutoff(updateCandidateDate, {
+    title: payload.title,
+    itemType: payload.itemType,
+  });
+
+  if (!updateDateCheck.eligible) {
+    return {
+      eligible: false,
+      reason: updateDateCheck.reason || 'Update notice date is before 1 August 2026 cutoff.',
     };
   }
 

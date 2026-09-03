@@ -21,6 +21,7 @@ import internalFetchRoutes from './src/server/routes/internalFetch';
 import internalTelegramRoutes from './src/server/routes/internalTelegram';
 import internalAutomationRoutes from './src/server/routes/internalAutomation';
 import { verifyTelegramBotConnection } from './src/lib/telegramHealth';
+import { startProductionScheduler } from './src/lib/server/automation/productionScheduler';
 
 async function startServer() {
   const app = express();
@@ -202,6 +203,11 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[StudyMate Sarkari] Server running on http://0.0.0.0:${PORT}`);
+
+    // Autonomous background monitoring scheduler
+    if (process.env.DISABLE_BACKGROUND_SCHEDULER !== 'true') {
+      startProductionScheduler();
+    }
   });
 }
 

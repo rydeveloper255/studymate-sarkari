@@ -228,6 +228,28 @@ router.post('/scheduler/health-check', authenticateInternal, async (req: Request
 });
 
 /**
+ * POST /api/internal/scheduler/reconcile
+ * Render Cron or external trigger for expired vacancy reconciliation.
+ * Automatically transitions expired live vacancies (application_end < CURRENT_TIME) to 'Closed'.
+ */
+router.post('/scheduler/reconcile', authenticateInternal, async (req: Request, res: Response) => {
+  try {
+    const { reconcileExpiredVacancies } = await import('../../lib/server/automation/reconciliationService');
+    const report = await reconcileExpiredVacancies();
+    res.json({
+      success: true,
+      report,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: 'RECONCILIATION_FAILED',
+      message: err?.message,
+    });
+  }
+});
+
+/**
  * POST /api/internal/workers/fetch
  * Worker endpoint for fetching an official source.
  */

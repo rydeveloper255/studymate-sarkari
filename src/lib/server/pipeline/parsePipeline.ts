@@ -20,6 +20,7 @@ import { verifyAndSanitizeUrl } from '../verification/urlSecurityVerifier';
 import { classifyContent } from '../verification/contentClassifier';
 import { generateDeduplicationKey, compareWithExistingRecords } from '../verification/deduplicator';
 import { evaluateExtractionConfidence } from '../verification/confidenceScorer';
+import { validatePublicationDateCutoff } from '../verification/dateValidator';
 import {
   insertParseLog,
   insertParsedItems,
@@ -113,6 +114,21 @@ export class ContentParsePipeline {
         if (dedupResult.relation === 'IDENTICAL_DUPLICATE') {
           duplicateCount++;
           continue; // Skip exact duplicate
+        }
+
+        // Hard Cutoff: ONLY PROCESS NEWLY PUBLISHED SOURCE CONTENT DATED 1 AUGUST 2026 OR LATER
+        const candidateDate =
+          raw.rawDates?.notificationDate ||
+          normalized.importantDates?.notificationDate ||
+          normalized.importantDates?.applyStartDate;
+        const dateCheck = validatePublicationDateCutoff(candidateDate, {
+          title: normalized.title,
+          itemType: normalized.itemType,
+        });
+
+        if (!dateCheck.eligible) {
+          // Reject historical archives or items published before 2026-08-01
+          continue;
         }
 
         if (dedupResult.recommendedStatus) {

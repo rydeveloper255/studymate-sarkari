@@ -112,6 +112,7 @@ export interface DbContentSource {
   priority: SourcePriority;
   check_interval_minutes: number;
   active: boolean;
+  is_active?: boolean;
   parser_key?: string | null;
   last_checked_at?: string | null;
   last_success_at?: string | null;

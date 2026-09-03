@@ -165,6 +165,8 @@ export function normalizeImportantDates(rawDates?: {
   isValidChronology: boolean;
   warnings: string[];
   evidenceSnippet?: string | null;
+  hasExplicitDate: boolean;
+  explicitIsoDate: string | null;
 } {
   const warnings: string[] = [];
   const notif = normalizeSingleDate(rawDates?.notificationDate);
@@ -174,12 +176,15 @@ export function normalizeImportantDates(rawDates?: {
   const admit = normalizeSingleDate(rawDates?.admitCardDate);
 
   const dates: ImportantDates = {
-    notificationDate: notif.isoDate || new Date().toISOString().split('T')[0],
+    notificationDate: notif.isoDate || start.isoDate || new Date().toISOString().split('T')[0],
     applyStartDate: start.isoDate || notif.isoDate || new Date().toISOString().split('T')[0],
     applyEndDate: end.isoDate || 'To be notified',
     examDate: exam.isoDate || undefined,
     admitCardDate: admit.isoDate || undefined,
   };
+
+  const explicitIsoDate = notif.isoDate || start.isoDate || end.isoDate || exam.isoDate || admit.isoDate || null;
+  const hasExplicitDate = explicitIsoDate !== null;
 
   let isValidChronology = true;
 
@@ -208,6 +213,8 @@ export function normalizeImportantDates(rawDates?: {
     isValidChronology,
     warnings,
     evidenceSnippet: evidenceParts.length > 0 ? evidenceParts.join(' | ') : null,
+    hasExplicitDate,
+    explicitIsoDate,
   };
 }
 

@@ -11,14 +11,29 @@
 
 import { ImportantDates, JobStatus } from '../../types';
 
+/**
+ * Returns today's date in Asia/Kolkata timezone (Indian Standard Time, UTC+05:30) as YYYY-MM-DD.
+ */
+export function getTodayIST(): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch {
+    return new Date().toISOString().split('T')[0];
+  }
+}
+
 export function deriveDeterministicJobStatus(
   dates: ImportantDates,
   fallbackStatus: JobStatus = 'Active'
 ): JobStatus {
   if (!dates) return fallbackStatus;
 
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = getTodayIST();
 
   // Helper to parse YYYY-MM-DD
   const parseDate = (dStr?: string): Date | null => {
@@ -32,7 +47,7 @@ export function deriveDeterministicJobStatus(
   const startDate = parseDate(dates.applyStartDate);
   const endDate = parseDate(dates.applyEndDate);
 
-  // Today at midnight UTC for clean comparison
+  // Today in IST
   const today = new Date(todayStr);
 
   // 1. Check if application start date is strictly in the future
@@ -58,4 +73,17 @@ export function deriveDeterministicJobStatus(
   }
 
   return fallbackStatus;
+}
+
+/**
+ * Checks whether a job vacancy form is currently LIVE.
+ * Live rule: application_start <= CURRENT_TIME AND application_end >= CURRENT_TIME
+ * If application_end < CURRENT_TIME -> false (Closed/Expired, never shown in live vacancies)
+ */
+export function isJobApplicationLive(dates?: ImportantDates, status?: JobStatus): boolean {
+  if (status === 'Closed') return false;
+  if (!dates) return status === 'Active' || status === 'Closing Soon';
+
+  const derived = deriveDeterministicJobStatus(dates, status);
+  return derived === 'Active' || derived === 'Closing Soon';
 }

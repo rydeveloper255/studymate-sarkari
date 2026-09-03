@@ -106,7 +106,8 @@ export function mapJobSourceRowToDbContentSource(row: any): DbContentSource {
     source_type: row.source_type || 'html',
     priority: (row.region === 'ALL' || categories.includes('UPSC') || categories.includes('SSC')) ? 'high' : 'medium',
     check_interval_minutes: 30,
-    active: row.active ?? true,
+    active: row.active ?? row.is_active ?? true,
+    is_active: row.is_active ?? row.active ?? true,
     parser_key: parserKey,
     last_checked_at: row.last_checked_at || null,
     last_success_at: row.last_success_at || null,
@@ -137,6 +138,7 @@ function initInMemoryStore() {
         priority: src.priority,
         check_interval_minutes: 30,
         active: src.active,
+        is_active: src.active,
         parser_key: src.parser_key || 'generic_html',
         last_checked_at: null,
         last_success_at: null,
@@ -1330,6 +1332,28 @@ export async function getTelegramNotificationLogs(
  * Retrieves all currently active jobs from database or in-memory fallback.
  */
 export async function getAllActiveJobs(limit = 200): Promise<DbGovernmentJob[]> {
+  const isLiveJob = (j: DbGovernmentJob): boolean => {
+    if (j.is_active === false) return false;
+    if (j.status?.toLowerCase() === 'closed') return false;
+    if (j.important_dates?.applyEndDate) {
+      const end = j.important_dates.applyEndDate.trim();
+      if (end && end !== 'To be notified') {
+        try {
+          const todayIST = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date());
+          if (end < todayIST) return false;
+        } catch {
+          // Fallback
+        }
+      }
+    }
+    return true;
+  };
+
   const client = getSupabaseAdmin();
   if (client) {
     try {
@@ -1341,7 +1365,7 @@ export async function getAllActiveJobs(limit = 200): Promise<DbGovernmentJob[]> 
         .limit(limit);
 
       if (!error && data && data.length > 0) {
-        return data as DbGovernmentJob[];
+        return (data as DbGovernmentJob[]).filter(isLiveJob);
       }
     } catch (err) {
       console.warn('[Server Admin] Fetching active jobs error:', err);
@@ -1349,7 +1373,7 @@ export async function getAllActiveJobs(limit = 200): Promise<DbGovernmentJob[]> 
   }
 
   return Array.from(inMemoryJobs.values())
-    .filter((j) => j.is_active !== false)
+    .filter(isLiveJob)
     .sort((a, b) => new Date(b.published_date || '').getTime() - new Date(a.published_date || '').getTime())
     .slice(0, limit);
 }
