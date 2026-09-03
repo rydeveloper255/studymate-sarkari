@@ -58,6 +58,20 @@ export class TelegramNotificationService {
   }
 
   /**
+   * Returns true if Telegram notifications are enabled and bot token is present.
+   */
+  public isEnabled(): boolean {
+    return Boolean(this.config.botToken) && this.config.notificationsEnabled && !this.config.dryRun;
+  }
+
+  /**
+   * Returns true if botToken is configured.
+   */
+  public isConfigured(): boolean {
+    return Boolean(this.config.botToken);
+  }
+
+  /**
    * Safe backend-only Telegram connection health check.
    * Performs real getMe query against Telegram Bot API when TELEGRAM_BOT_TOKEN is set.
    * Cached for 30s to prevent spamming/rate-limiting the Telegram API on health probes.

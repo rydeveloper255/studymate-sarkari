@@ -15,6 +15,7 @@
 import { createHash } from 'node:crypto';
 import { DbContentSource, FetchState } from '../../types';
 import { validateSourceUrl, validateRedirect } from './urlValidator';
+import { extractTextFromPdfBuffer } from './parsers/pdfTextExtractor';
 
 export interface FetchOptions {
   timeoutMs?: number;
@@ -100,7 +101,7 @@ export async function fetchSourceContent(
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const userAgent = options.userAgent || DEFAULT_USER_AGENT;
 
-  const initialUrl = source.official_url;
+  const initialUrl = source.recruitment_url || source.official_url;
   const validation = validateSourceUrl(initialUrl, {
     allowLoopbackForTesting: options.allowLoopbackForTesting,
   });
@@ -392,7 +393,18 @@ export async function fetchSourceContent(
       const contentHash = calculateContentHash(buffer);
       const isChanged = source.content_hash ? source.content_hash !== contentHash : true;
       const state: FetchState = isChanged ? 'SUCCESS_CHANGED' : 'SUCCESS_UNCHANGED';
-      const textContent = buffer.toString('utf-8');
+      
+      let textContent = '';
+      if (contentType.includes('pdf') || currentUrl.toLowerCase().endsWith('.pdf')) {
+        try {
+          const pdfExtract = await extractTextFromPdfBuffer(buffer);
+          textContent = pdfExtract.text || buffer.toString('utf-8');
+        } catch {
+          textContent = buffer.toString('utf-8');
+        }
+      } else {
+        textContent = buffer.toString('utf-8');
+      }
 
       return {
         state,

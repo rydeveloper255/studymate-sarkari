@@ -28,6 +28,7 @@ import {
   getSourceById,
   getParsedItems,
 } from '../supabaseAdmin';
+import { getDueSourcesFromRegistry } from '../sources/sourceLoader';
 import { fetchSourceContent, calculateContentHash } from '../sourceFetcher';
 import { ContentParsePipeline } from '../pipeline/parsePipeline';
 import { publishParsedItem } from '../publishing/publishService';
@@ -141,8 +142,8 @@ export class PipelineOrchestrator {
           if (s) targetSources.push(s);
         }
       } else {
-        targetSources = await getDueSources({
-          limit: options.limit || 20,
+        targetSources = await getDueSourcesFromRegistry({
+          limit: options.limit || 50,
           scope: options.scope,
           stateCode: options.stateCode,
           priority: options.priority,

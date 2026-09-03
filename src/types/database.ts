@@ -105,6 +105,8 @@ export interface DbContentSource {
   id: string;
   source_name: string;
   official_url: string;
+  recruitment_url?: string | null;
+  region?: string | null;
   scope: SourceScope;
   state_code?: string | null;
   category: SourceCategory[];

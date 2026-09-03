@@ -21,7 +21,7 @@ import internalFetchRoutes from './src/server/routes/internalFetch';
 import internalTelegramRoutes from './src/server/routes/internalTelegram';
 import internalAutomationRoutes from './src/server/routes/internalAutomation';
 import { verifyTelegramBotConnection } from './src/lib/telegramHealth';
-import { startProductionScheduler } from './src/lib/server/automation/productionScheduler';
+import { startProductionScheduler, getScraperHealthStatus } from './src/lib/server/automation/productionScheduler';
 
 async function startServer() {
   const app = express();
@@ -140,7 +140,31 @@ async function startServer() {
       payload.bot = botName;
     }
 
+    try {
+      const scraperHealth = getScraperHealthStatus();
+      payload.scraper = {
+        status: scraperHealth.scraper_status,
+        last_successful_run: scraperHealth.last_successful_run,
+        active_sources: scraperHealth.active_sources_count,
+      };
+    } catch {
+      // Best-effort scraper health
+    }
+
     res.json(payload);
+  });
+
+  // Dedicated Scraper Health Check Endpoint
+  app.get('/api/health/scraper', (req: Request, res: Response) => {
+    try {
+      const scraperHealth = getScraperHealthStatus();
+      res.json(scraperHealth);
+    } catch (err: any) {
+      res.status(500).json({
+        status: 'error',
+        error: err?.message || 'Failed to retrieve scraper health',
+      });
+    }
   });
 
   // Dedicated Telegram Health Check Endpoint

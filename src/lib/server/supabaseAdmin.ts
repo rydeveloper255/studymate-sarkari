@@ -100,6 +100,8 @@ export function mapJobSourceRowToDbContentSource(row: any): DbContentSource {
     id: String(row.id),
     source_name: row.name || 'Official Government Source',
     official_url: row.official_url,
+    recruitment_url: row.recruitment_url || null,
+    region: row.region || null,
     scope: isCentral ? 'central' : 'state',
     state_code: isCentral ? null : row.region,
     category: categories,
