@@ -21,6 +21,7 @@ import {
   updateParsedItemStatus,
   getRecentParseLogs,
   getPublishLogs,
+  seedJobSourcesToSupabase,
 } from '../../lib/server/supabaseAdmin';
 import { ContentParsePipeline } from '../../lib/server/pipeline/parsePipeline';
 import { fetchSourceContent, calculateContentHash } from '../../lib/server/sourceFetcher';
@@ -150,6 +151,27 @@ router.get('/sources', authenticateInternalRequest, async (req: Request, res: Re
 });
 
 /**
+ * POST /api/internal/sources/seed
+ * Synchronizes the 42 verified government recruitment sources into Supabase job_sources.
+ */
+router.post('/sources/seed', authenticateInternalRequest, async (req: Request, res: Response) => {
+  try {
+    const result = await seedJobSourcesToSupabase();
+    res.json({
+      success: true,
+      message: `Synchronized ${result.total} verified official sources into job_sources (${result.inserted} inserted, ${result.updated} updated).`,
+      data: result,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: 'SEED_FAILED',
+      message: err?.message || 'Failed to seed job sources',
+    });
+  }
+});
+
+/**
  * GET /api/internal/fetch-logs
  * Protected audit logs query.
  */
@@ -209,7 +231,7 @@ router.post('/parse-source', authenticateInternalRequest, async (req: Request, r
         return;
       }
       contentHash = fetchResult.contentHash;
-      contentToParse = ''; // Handled by pipeline or fallback
+      contentToParse = fetchResult.content || '';
     } else {
       contentHash = calculateContentHash(contentToParse);
     }

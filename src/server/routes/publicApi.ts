@@ -16,6 +16,7 @@ import {
 import {
   getAllActiveJobs,
   getAllActiveUpdates,
+  getAllRegisteredSources,
   getJobBySlugOrId,
 } from '../../lib/server/supabaseAdmin';
 import { serverCache } from '../../lib/server/cache/publicCache';
@@ -159,6 +160,63 @@ router.get('/jobs/:slugOrId', publicApiRateLimiter, async (req: Request, res: Re
     res.json({ data: job });
   } catch (err: any) {
     res.status(500).json({ error: 'Internal server error fetching job' });
+  }
+});
+
+/**
+ * Public Government Updates Stream
+ */
+router.get('/updates', publicApiRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const category = req.query.category ? sanitizeStringInput(req.query.category as string, 30) : null;
+    const limit = req.query.limit ? sanitizeInteger(req.query.limit as string, 1, 100, 20) : 20;
+    const cacheKey = `public_updates_${category || 'all'}_${limit}`;
+
+    const cached = serverCache.get(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
+    let updates = await getAllActiveUpdates(100);
+    if (category && category !== 'all') {
+      updates = updates.filter((u) => u.category === category);
+    }
+
+    const payload = {
+      data: updates.slice(0, limit),
+      total: updates.length,
+    };
+
+    serverCache.set(cacheKey, payload, 60, ['updates']);
+    res.json(payload);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve updates' });
+  }
+});
+
+/**
+ * Public Official Sources Directory
+ */
+router.get('/sources', publicApiRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const cacheKey = 'public_sources_directory';
+    const cached = serverCache.get(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
+    const sources = await getAllRegisteredSources();
+    const payload = {
+      data: sources.filter((s) => s.active),
+      total: sources.filter((s) => s.active).length,
+    };
+
+    serverCache.set(cacheKey, payload, 180, ['sources']);
+    res.json(payload);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to retrieve official sources' });
   }
 });
 

@@ -195,7 +195,7 @@ export class PipelineOrchestrator {
                 sourcesChanged++;
                 fetchedContentList.push({
                   source: src,
-                  content: '', // content stream or fetched raw
+                  content: fetchRes.content || '',
                   hash: fetchRes.contentHash || calculateContentHash(src.official_url + Date.now()),
                 });
               }

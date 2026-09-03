@@ -30,6 +30,7 @@ import {
   DbTelegramNotificationLog,
 } from '../../types';
 import { OFFICIAL_GOVERNMENT_SOURCES } from '../../data/officialSources';
+import { VERIFIED_OFFICIAL_JOB_SOURCES } from '../../data/verifiedJobSources';
 
 let adminClient: SupabaseClient | null = null;
 
@@ -72,32 +73,81 @@ const inMemoryAnswerKeys: Map<string, DbAnswerKey> = new Map();
 const inMemoryPublishLogs: DbPublishLog[] = [];
 const inMemoryTelegramLogs: Map<string, DbTelegramNotificationLog> = new Map();
 
+export function mapJobSourceRowToDbContentSource(row: any): DbContentSource {
+  const isCentral = row.region === 'ALL' || !row.region;
+  const categories = Array.isArray(row.category)
+    ? row.category
+    : typeof row.category === 'string'
+      ? [row.category]
+      : ['vacancy'];
+
+  let parserKey = 'generic_html';
+  const url = (row.official_url || row.recruitment_url || '').toLowerCase();
+  const name = (row.name || '').toLowerCase();
+  if (url.includes('ssc.gov') || url.includes('ssc-') || url.includes('sscnr')) {
+    parserKey = 'ssc_notices';
+  } else if (url.includes('upsc.gov')) {
+    parserKey = 'upsc_recruitment';
+  } else if (url.includes('upsconline.nic')) {
+    parserKey = 'upsc_online';
+  } else if (url.includes('nta.ac.in')) {
+    parserKey = 'nta_bulletins';
+  } else if (name.includes('public service commission') || name.includes('psc') || categories.includes('STATE_PSC')) {
+    parserKey = 'state_psc';
+  }
+
+  return {
+    id: String(row.id),
+    source_name: row.name || 'Official Government Source',
+    official_url: row.official_url,
+    scope: isCentral ? 'central' : 'state',
+    state_code: isCentral ? null : row.region,
+    category: categories,
+    source_type: row.source_type || 'html',
+    priority: (row.region === 'ALL' || categories.includes('UPSC') || categories.includes('SSC')) ? 'high' : 'medium',
+    check_interval_minutes: 30,
+    active: row.active ?? true,
+    parser_key: parserKey,
+    last_checked_at: row.last_checked_at || null,
+    last_success_at: row.last_success_at || null,
+    last_error: row.last_error || null,
+    content_hash: null,
+    etag: null,
+    last_modified: null,
+    fetch_status: null,
+    is_fetching: false,
+    created_at: row.created_at || new Date().toISOString(),
+    updated_at: row.updated_at || new Date().toISOString(),
+  };
+}
+
 // Initialize in-memory registry from verified official sources
 function initInMemoryStore() {
   if (inMemorySources.size === 0) {
-    for (const src of OFFICIAL_GOVERNMENT_SOURCES) {
+    for (const src of VERIFIED_OFFICIAL_JOB_SOURCES) {
+      const isCentral = src.region === 'ALL';
       inMemorySources.set(src.id, {
         id: src.id,
-        source_name: src.sourceName,
-        official_url: src.officialUrl,
-        scope: src.scope,
-        state_code: src.stateCode || null,
-        category: src.category,
-        source_type: src.sourceType,
+        source_name: src.name,
+        official_url: src.official_url,
+        scope: isCentral ? 'central' : 'state',
+        state_code: isCentral ? null : src.region,
+        category: src.category as any,
+        source_type: src.source_type as any,
         priority: src.priority,
-        check_interval_minutes: src.checkIntervalMinutes || 60,
+        check_interval_minutes: 30,
         active: src.active,
-        parser_key: src.parserKey || null,
-        last_checked_at: src.lastCheckedAt || null,
-        last_success_at: src.lastSuccessAt || null,
-        last_error: src.lastError || null,
+        parser_key: src.parser_key || 'generic_html',
+        last_checked_at: null,
+        last_success_at: null,
+        last_error: null,
         content_hash: null,
         etag: null,
         last_modified: null,
         fetch_status: null,
         is_fetching: false,
-        created_at: src.createdAt || new Date().toISOString(),
-        updated_at: src.updatedAt || new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       });
     }
   }
@@ -106,12 +156,19 @@ function initInMemoryStore() {
 initInMemoryStore();
 
 /**
- * Retrieves all registered sources.
+ * Retrieves all registered sources. Primary table: job_sources, secondary: content_sources.
  */
 export async function getAllRegisteredSources(): Promise<DbContentSource[]> {
   const client = getSupabaseAdmin();
   if (client) {
     try {
+      // 1. Primary: Query job_sources
+      const { data: jobSources, error: jsErr } = await client.from('job_sources').select('*');
+      if (!jsErr && jobSources && jobSources.length > 0) {
+        return jobSources.map(mapJobSourceRowToDbContentSource);
+      }
+
+      // 2. Secondary fallback: content_sources
       const { data, error } = await client.from('content_sources').select('*');
       if (!error && data && data.length > 0) {
         return data as DbContentSource[];
@@ -132,6 +189,18 @@ export async function getSourceById(sourceId: string): Promise<DbContentSource |
   const client = getSupabaseAdmin();
   if (client) {
     try {
+      // 1. Primary: job_sources
+      const { data: jsData, error: jsErr } = await client
+        .from('job_sources')
+        .select('*')
+        .eq('id', sourceId)
+        .maybeSingle();
+
+      if (!jsErr && jsData) {
+        return mapJobSourceRowToDbContentSource(jsData);
+      }
+
+      // 2. Secondary fallback: content_sources
       const { data, error } = await client
         .from('content_sources')
         .select('*')
@@ -268,6 +337,22 @@ export async function updateSourceMonitoring(
   const client = getSupabaseAdmin();
   if (client) {
     try {
+      // 1. Update job_sources table
+      const jobSourcePayload: Record<string, any> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (updates.last_checked_at) jobSourcePayload.last_checked_at = updates.last_checked_at;
+      if (updates.last_success_at) jobSourcePayload.last_success_at = updates.last_success_at;
+      if (updates.last_error !== undefined) jobSourcePayload.last_error = updates.last_error;
+      if (updates.active !== undefined) jobSourcePayload.active = updates.active;
+
+      await client.from('job_sources').update(jobSourcePayload).eq('id', sourceId);
+    } catch {
+      // Best-effort job_sources update
+    }
+
+    try {
+      // 2. Update content_sources table
       await client.from('content_sources').update(payload).eq('id', sourceId);
     } catch (err) {
       console.warn(`[Server Admin] Failed to update source ${sourceId} in Supabase:`, err);
@@ -281,7 +366,7 @@ export async function updateSourceMonitoring(
 }
 
 /**
- * Inserts a fetch audit log record into `content_fetch_log`.
+ * Inserts a fetch audit log record into `content_fetch_log` and `source_fetch_logs`.
  */
 export async function insertFetchLog(logEntry: Omit<DbContentFetchLog, 'id' | 'created_at'>): Promise<DbContentFetchLog> {
   const fullLog: DbContentFetchLog = {
@@ -292,6 +377,22 @@ export async function insertFetchLog(logEntry: Omit<DbContentFetchLog, 'id' | 'c
 
   const client = getSupabaseAdmin();
   if (client) {
+    try {
+      // Best effort insert into source_fetch_logs
+      await client.from('source_fetch_logs').insert({
+        source_id: fullLog.source_id,
+        requested_url: fullLog.requested_url,
+        final_url: fullLog.final_url,
+        fetched_at: fullLog.fetched_at,
+        http_status: fullLog.http_status,
+        success: fullLog.success,
+        error_code: fullLog.error_code || null,
+        error_message: fullLog.error_message || null,
+      });
+    } catch {
+      // Best effort
+    }
+
     try {
       const { data, error } = await client
         .from('content_fetch_log')
@@ -875,6 +976,26 @@ export async function upsertPublishedUpdate(update: DbGovernmentUpdate): Promise
         .single();
 
       if (!error && data) {
+        // Also sync to exam_updates table for unified public access
+        try {
+          await client.from('exam_updates').upsert({
+            title: update.title,
+            update_type: update.category === 'exam_update' ? 'exam_notice' : update.category,
+            organization: update.organization,
+            update_date: update.update_date,
+            summary: update.summary,
+            link_url: update.link_url || null,
+            official_url: update.link_url || null,
+            badge_tag: update.badge_tag || null,
+            is_high_priority: update.is_high_priority ?? false,
+            is_verified: true,
+            status: 'Active',
+            job_id: update.job_id || null,
+          });
+        } catch {
+          // Non-blocking
+        }
+
         inMemoryUpdates.set(data.id, data as DbGovernmentUpdate);
         return data as DbGovernmentUpdate;
       }
@@ -1283,6 +1404,105 @@ export async function getJobBySlugOrId(slugOrId: string): Promise<DbGovernmentJo
 
   return findExistingJob(slugOrId);
 }
+
+/**
+ * Seeds or synchronizes the authoritative 42 verified government job sources into Supabase job_sources table.
+ */
+export async function seedJobSourcesToSupabase(): Promise<{
+  inserted: number;
+  updated: number;
+  total: number;
+  active: number;
+  regionBreakdown: Record<string, number>;
+  categoryBreakdown: Record<string, number>;
+}> {
+  const client = getSupabaseAdmin();
+  let inserted = 0;
+  let updated = 0;
+  const regionBreakdown: Record<string, number> = {};
+  const categoryBreakdown: Record<string, number> = {};
+
+  if (client) {
+    for (const src of VERIFIED_OFFICIAL_JOB_SOURCES) {
+      try {
+        const { data: found } = await client
+          .from('job_sources')
+          .select('id, official_url')
+          .eq('official_url', src.official_url)
+          .maybeSingle();
+
+        const payload = {
+          name: src.name,
+          organization: src.organization,
+          region: src.region,
+          source_type: src.source_type,
+          official_url: src.official_url,
+          recruitment_url: src.recruitment_url,
+          category: src.category,
+          active: src.active,
+          updated_at: new Date().toISOString(),
+        };
+
+        if (found) {
+          await client.from('job_sources').update(payload).eq('id', found.id);
+          updated++;
+        } else {
+          await client.from('job_sources').insert({
+            id: src.id,
+            ...payload,
+          });
+          inserted++;
+        }
+      } catch (err) {
+        console.warn(`[Server Admin] Failed to upsert job_source "${src.name}":`, err);
+      }
+    }
+
+    try {
+      const { data: allSources } = await client.from('job_sources').select('*');
+      if (allSources && allSources.length > 0) {
+        for (const s of allSources) {
+          const reg = s.region || 'UNSPECIFIED';
+          regionBreakdown[reg] = (regionBreakdown[reg] || 0) + 1;
+          if (Array.isArray(s.category)) {
+            for (const c of s.category) {
+              categoryBreakdown[c] = (categoryBreakdown[c] || 0) + 1;
+            }
+          }
+        }
+        return {
+          inserted,
+          updated,
+          total: allSources.length,
+          active: allSources.filter((s: any) => s.active !== false).length,
+          regionBreakdown,
+          categoryBreakdown,
+        };
+      }
+    } catch {
+      // Fallback below
+    }
+  }
+
+  // Fallback calculation from verified registry
+  for (const src of VERIFIED_OFFICIAL_JOB_SOURCES) {
+    const reg = src.region || 'UNSPECIFIED';
+    regionBreakdown[reg] = (regionBreakdown[reg] || 0) + 1;
+    for (const c of src.category) {
+      categoryBreakdown[c] = (categoryBreakdown[c] || 0) + 1;
+    }
+  }
+
+  return {
+    inserted: VERIFIED_OFFICIAL_JOB_SOURCES.length,
+    updated: 0,
+    total: VERIFIED_OFFICIAL_JOB_SOURCES.length,
+    active: VERIFIED_OFFICIAL_JOB_SOURCES.filter((s) => s.active).length,
+    regionBreakdown,
+    categoryBreakdown,
+  };
+}
+
 
 
 

@@ -173,3 +173,31 @@ export function mapDbSourceToItem(row: DbContentSource): ContentSourceInfo {
     updatedAt: row.updated_at,
   };
 }
+
+export function mapJobSourceToContentSourceInfo(row: any): ContentSourceInfo {
+  const isCentral = row.region === 'ALL' || !row.region;
+  const categories = Array.isArray(row.category)
+    ? row.category
+    : typeof row.category === 'string'
+      ? [row.category]
+      : ['vacancy'];
+
+  return {
+    id: row.id,
+    sourceName: row.name || 'Official Government Source',
+    officialUrl: row.official_url,
+    scope: isCentral ? 'central' : 'state',
+    stateCode: isCentral ? undefined : row.region,
+    category: categories,
+    sourceType: row.source_type || 'html',
+    priority: (row.region === 'ALL' || categories.includes('UPSC') || categories.includes('SSC')) ? 'high' : 'medium',
+    checkIntervalMinutes: 30,
+    active: row.active ?? true,
+    parserKey: undefined,
+    lastCheckedAt: row.last_checked_at || undefined,
+    lastSuccessAt: row.last_success_at || undefined,
+    lastError: row.last_error || undefined,
+    createdAt: row.created_at || new Date().toISOString(),
+    updatedAt: row.updated_at || new Date().toISOString(),
+  };
+}

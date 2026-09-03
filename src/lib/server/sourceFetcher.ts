@@ -35,6 +35,7 @@ export interface FetchExecutionResult {
   contentHash: string | null;
   contentType: string | null;
   contentLength: number | null;
+  content?: string;
   etag: string | null;
   lastModified: string | null;
   responseTimeMs: number;
@@ -391,6 +392,7 @@ export async function fetchSourceContent(
       const contentHash = calculateContentHash(buffer);
       const isChanged = source.content_hash ? source.content_hash !== contentHash : true;
       const state: FetchState = isChanged ? 'SUCCESS_CHANGED' : 'SUCCESS_UNCHANGED';
+      const textContent = buffer.toString('utf-8');
 
       return {
         state,
@@ -400,6 +402,7 @@ export async function fetchSourceContent(
         contentHash,
         contentType,
         contentLength: buffer.byteLength,
+        content: textContent,
         etag: etag || null,
         lastModified: lastModified || null,
         responseTimeMs,

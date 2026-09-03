@@ -80,6 +80,45 @@ export async function fetchJobs(
     }
   }
 
+  // Browser client fallback to Express server API
+  if (typeof window !== 'undefined') {
+    try {
+      const params = new URLSearchParams();
+      if (options.sector && options.sector !== 'all') params.set('sector', options.sector);
+      if (options.state && options.state !== 'All') params.set('state', options.state);
+      if (options.centralCategory && options.centralCategory !== 'All') params.set('category', options.centralCategory);
+      if (page) params.set('page', String(page));
+      if (pageSize) params.set('limit', String(pageSize));
+
+      const res = await fetch(`/api/public/jobs?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && Array.isArray(json.data) && json.data.length > 0) {
+          let items = json.data.map((row: DbGovernmentJob) => mapDbJobToVacancy(row));
+          if (options.searchQuery && options.searchQuery.trim()) {
+            const q = options.searchQuery.toLowerCase().trim();
+            items = items.filter(
+              (j: JobVacancy) =>
+                j.title.toLowerCase().includes(q) ||
+                j.organization.toLowerCase().includes(q) ||
+                j.postName.toLowerCase().includes(q)
+            );
+          }
+          return {
+            data: items,
+            total: json.total || items.length,
+            page: json.page || page,
+            pageSize: json.limit || pageSize,
+            totalPages: json.totalPages || Math.ceil((json.total || items.length) / pageSize) || 1,
+            isSupabaseSource: true,
+          };
+        }
+      }
+    } catch (err) {
+      // Browser fetch fallback
+    }
+  }
+
   // In test / offline server pipeline environment, read verified records from admin publisher store
   if (typeof window === 'undefined') {
     try {
@@ -159,6 +198,21 @@ export async function fetchJobBySlugOrId(slugOrId: string): Promise<JobVacancy |
       }
     } catch (err) {
       console.warn('[Data Layer] Supabase job lookup error:', err);
+    }
+  }
+
+  // Browser fallback
+  if (typeof window !== 'undefined') {
+    try {
+      const res = await fetch(`/api/public/jobs/${encodeURIComponent(slugOrId)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data) {
+          return mapDbJobToVacancy(json.data);
+        }
+      }
+    } catch {
+      // ignore
     }
   }
 
