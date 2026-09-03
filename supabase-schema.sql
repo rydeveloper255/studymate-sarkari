@@ -419,4 +419,199 @@ CREATE POLICY "Public read access for pipeline_runs" ON pipeline_runs FOR SELECT
 CREATE POLICY "Public read access for pipeline_dead_letter_queue" ON pipeline_dead_letter_queue FOR SELECT USING (true);
 CREATE POLICY "Public read access for distributed_locks" ON distributed_locks FOR SELECT USING (true);
 
+-- ==============================================================================
+-- STEP 9: NORMALIZED GOVERNMENT INFORMATION SCHEMA (SECTIONS 3, 4, 5, 6, 8, 15)
+-- ==============================================================================
+
+-- 1. JOB REGIONS (37 regions: All India + 28 States + 8 Union Territories)
+CREATE TABLE IF NOT EXISTS job_regions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('all_india', 'state', 'ut')),
+    capital TEXT,
+    zone TEXT,
+    total_active_vacancies_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. JOB CATEGORIES (Normalized classification: SSC, Railway, Police, UPSC, Banking, etc.)
+CREATE TABLE IF NOT EXISTS job_categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    description TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. JOB SOURCES (Authoritative official registry)
+CREATE TABLE IF NOT EXISTS job_sources (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    organization TEXT NOT NULL,
+    region TEXT,
+    source_type TEXT NOT NULL DEFAULT 'html',
+    official_url TEXT NOT NULL,
+    recruitment_url TEXT,
+    category TEXT[] NOT NULL DEFAULT '{"vacancy"}',
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    last_checked_at TIMESTAMPTZ,
+    last_success_at TIMESTAMPTZ,
+    last_error TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. JOB CATEGORY MAP (Many-to-many relationship)
+CREATE TABLE IF NOT EXISTS job_category_map (
+    job_id UUID REFERENCES government_jobs(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES job_categories(id) ON DELETE CASCADE,
+    PRIMARY KEY (job_id, category_id)
+);
+
+-- 5. EXAM UPDATES (Unified lifecycle events: recruitment, exam_notice, admit_card, result, answer_key)
+CREATE TABLE IF NOT EXISTS exam_updates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    update_type TEXT NOT NULL CHECK (update_type IN ('recruitment', 'exam_notice', 'admit_card', 'result', 'answer_key', 'cutoff', 'selection_list', 'other')),
+    organization TEXT NOT NULL,
+    update_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    summary TEXT NOT NULL,
+    official_url TEXT,
+    link_url TEXT,
+    badge_tag TEXT,
+    is_high_priority BOOLEAN DEFAULT FALSE,
+    is_verified BOOLEAN DEFAULT TRUE,
+    status TEXT NOT NULL DEFAULT 'Active',
+    job_id UUID REFERENCES government_jobs(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. SOURCE FETCH LOGS (Audit trail for source fetching)
+CREATE TABLE IF NOT EXISTS source_fetch_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_id UUID REFERENCES job_sources(id) ON DELETE CASCADE,
+    requested_url TEXT NOT NULL,
+    final_url TEXT NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    http_status INTEGER,
+    success BOOLEAN NOT NULL DEFAULT FALSE,
+    changed BOOLEAN NOT NULL DEFAULT FALSE,
+    content_hash TEXT,
+    content_type TEXT,
+    content_length BIGINT,
+    response_time_ms INTEGER,
+    error_code TEXT,
+    error_message TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. TELEGRAM NOTIFICATIONS (Idempotent tracking for canonical notifications)
+CREATE TABLE IF NOT EXISTS telegram_notifications (
+    id TEXT PRIMARY KEY,
+    job_id UUID REFERENCES government_jobs(id) ON DELETE SET NULL,
+    update_id UUID REFERENCES exam_updates(id) ON DELETE SET NULL,
+    telegram_chat_id TEXT NOT NULL,
+    message_type TEXT NOT NULL,
+    sent_at TIMESTAMPTZ,
+    telegram_message_id BIGINT,
+    idempotency_key TEXT UNIQUE NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('QUEUED', 'SENT', 'FAILED', 'SKIPPED_DUPLICATE', 'SKIPPED_INELIGIBLE', 'DRY_RUN_SUCCESS', 'DISABLED')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- INDEXES FOR NORMALIZED TABLES
+CREATE INDEX IF NOT EXISTS idx_job_regions_code ON job_regions(code);
+CREATE INDEX IF NOT EXISTS idx_job_regions_slug ON job_regions(slug);
+CREATE INDEX IF NOT EXISTS idx_job_regions_type ON job_regions(type);
+CREATE INDEX IF NOT EXISTS idx_job_categories_code ON job_categories(code);
+CREATE INDEX IF NOT EXISTS idx_job_categories_slug ON job_categories(slug);
+CREATE INDEX IF NOT EXISTS idx_job_sources_active ON job_sources(active);
+CREATE INDEX IF NOT EXISTS idx_job_sources_region ON job_sources(region);
+CREATE INDEX IF NOT EXISTS idx_exam_updates_type ON exam_updates(update_type);
+CREATE INDEX IF NOT EXISTS idx_exam_updates_job_id ON exam_updates(job_id);
+CREATE INDEX IF NOT EXISTS idx_exam_updates_date ON exam_updates(update_date DESC);
+CREATE INDEX IF NOT EXISTS idx_source_fetch_logs_source ON source_fetch_logs(source_id);
+CREATE INDEX IF NOT EXISTS idx_tg_notifications_key ON telegram_notifications(idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_tg_notifications_job ON telegram_notifications(job_id);
+
+-- RLS FOR NORMALIZED TABLES
+ALTER TABLE job_regions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_category_map ENABLE ROW LEVEL SECURITY;
+ALTER TABLE exam_updates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE source_fetch_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE telegram_notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read access for job_regions" ON job_regions FOR SELECT USING (true);
+CREATE POLICY "Public read access for job_categories" ON job_categories FOR SELECT USING (true);
+CREATE POLICY "Public read access for job_sources" ON job_sources FOR SELECT USING (true);
+CREATE POLICY "Public read access for job_category_map" ON job_category_map FOR SELECT USING (true);
+CREATE POLICY "Public read access for exam_updates" ON exam_updates FOR SELECT USING (is_verified = true);
+CREATE POLICY "Public read access for source_fetch_logs" ON source_fetch_logs FOR SELECT USING (true);
+CREATE POLICY "Public read access for telegram_notifications" ON telegram_notifications FOR SELECT USING (true);
+
+-- SEED DATA: 37 REGIONS (All India + 28 States + 8 Union Territories)
+INSERT INTO job_regions (code, name, slug, type, capital, zone) VALUES
+('ALL', 'All India', 'all-india', 'all_india', 'New Delhi', 'All India'),
+('AP', 'Andhra Pradesh', 'andhra-pradesh', 'state', 'Amaravati', 'Southern'),
+('AR', 'Arunachal Pradesh', 'arunachal-pradesh', 'state', 'Itanagar', 'North-Eastern'),
+('AS', 'Assam', 'assam', 'state', 'Dispur', 'North-Eastern'),
+('BR', 'Bihar', 'bihar', 'state', 'Patna', 'Eastern'),
+('CG', 'Chhattisgarh', 'chhattisgarh', 'state', 'Raipur', 'Central'),
+('GA', 'Goa', 'goa', 'state', 'Panaji', 'Western'),
+('GJ', 'Gujarat', 'gujarat', 'state', 'Gandhinagar', 'Western'),
+('HR', 'Haryana', 'haryana', 'state', 'Chandigarh', 'Northern'),
+('HP', 'Himachal Pradesh', 'himachal-pradesh', 'state', 'Shimla', 'Northern'),
+('JH', 'Jharkhand', 'jharkhand', 'state', 'Ranchi', 'Eastern'),
+('KA', 'Karnataka', 'karnataka', 'state', 'Bengaluru', 'Southern'),
+('KL', 'Kerala', 'kerala', 'state', 'Thiruvananthapuram', 'Southern'),
+('MP', 'Madhya Pradesh', 'madhya-pradesh', 'state', 'Bhopal', 'Central'),
+('MH', 'Maharashtra', 'maharashtra', 'state', 'Mumbai', 'Western'),
+('MN', 'Manipur', 'manipur', 'state', 'Imphal', 'North-Eastern'),
+('ML', 'Meghalaya', 'meghalaya', 'state', 'Shillong', 'North-Eastern'),
+('MZ', 'Mizoram', 'mizoram', 'state', 'Aizawl', 'North-Eastern'),
+('NL', 'Nagaland', 'nagaland', 'state', 'Kohima', 'North-Eastern'),
+('OD', 'Odisha', 'odisha', 'state', 'Bhubaneswar', 'Eastern'),
+('PB', 'Punjab', 'punjab', 'state', 'Chandigarh', 'Northern'),
+('RJ', 'Rajasthan', 'rajasthan', 'state', 'Jaipur', 'Northern'),
+('SK', 'Sikkim', 'sikkim', 'state', 'Gangtok', 'North-Eastern'),
+('TN', 'Tamil Nadu', 'tamil-nadu', 'state', 'Chennai', 'Southern'),
+('TS', 'Telangana', 'telangana', 'state', 'Hyderabad', 'Southern'),
+('TR', 'Tripura', 'tripura', 'state', 'Agartala', 'North-Eastern'),
+('UP', 'Uttar Pradesh', 'uttar-pradesh', 'state', 'Lucknow', 'Northern'),
+('UK', 'Uttarakhand', 'uttarakhand', 'state', 'Dehradun', 'Northern'),
+('WB', 'West Bengal', 'west-bengal', 'state', 'Kolkata', 'Eastern'),
+('AN', 'Andaman and Nicobar Islands', 'andaman-and-nicobar-islands', 'ut', 'Port Blair', 'Southern'),
+('CH', 'Chandigarh', 'chandigarh', 'ut', 'Chandigarh', 'Northern'),
+('DN', 'Dadra and Nagar Haveli and Daman and Diu', 'dadra-and-nagar-haveli-and-daman-and-diu', 'ut', 'Daman', 'Western'),
+('DL', 'Delhi', 'delhi', 'ut', 'New Delhi', 'Northern'),
+('JK', 'Jammu and Kashmir', 'jammu-and-kashmir', 'ut', 'Srinagar/Jammu', 'Northern'),
+('LA', 'Ladakh', 'ladakh', 'ut', 'Leh', 'Northern'),
+('LD', 'Lakshadweep', 'lakshadweep', 'ut', 'Kavaratti', 'Southern'),
+('PY', 'Puducherry', 'puducherry', 'ut', 'Puducherry', 'Southern')
+ON CONFLICT (code) DO NOTHING;
+
+-- SEED DATA: 15 RECRUITMENT CATEGORIES
+INSERT INTO job_categories (code, name, slug, description) VALUES
+('CENTRAL', 'Central Government', 'central-government', 'Recruitments by ministries, departments and central organizations'),
+('STATE', 'State Government', 'state-government', 'State level recruitments across administrative and department wings'),
+('SSC', 'Staff Selection Commission', 'ssc', 'SSC CGL, CHSL, MTS, CPO, GD Constable and technical cadres'),
+('RAILWAY', 'Railway Recruitment Board', 'railway', 'Indian Railways RRB NTPC, Group D, ALP, JE, RPF vacancies'),
+('POLICE', 'Police & Paramilitary', 'police', 'State Police, CAPF, CRPF, BSF, CISF, ITBP, SSB and Defence cadres'),
+('UPSC', 'Union Public Service Commission', 'upsc', 'Civil Services (IAS, IPS, IFS), CDS, NDA, CMS, IES, ORA'),
+('BANKING', 'Banking & Insurance', 'banking', 'IBPS PO/Clerk, SBI PO/Clerk, RBI Grade B, LIC, Insurance PSUs'),
+('DEFENCE', 'Armed Forces & Defence', 'defence', 'Indian Army, Indian Navy, Indian Air Force, Coast Guard, AFCAT'),
+('TEACHING', 'Teaching & Academia', 'teaching', 'CTET, KVS, NVS, State TET, Assistant Professor, Lecturer vacancies'),
+('HEALTHCARE', 'Healthcare & Medical', 'healthcare', 'AIIMS, ESIC, State Health Missions, Staff Nurse, Medical Officer'),
+('PSU', 'Public Sector Undertakings', 'psu', 'Maharatna & Navratna PSUs like ONGC, BHEL, IOCL, SAIL, NTPC, GAIL'),
+('COURT', 'Judiciary & High Courts', 'court', 'Supreme Court, High Courts, District Courts, Judicial Services'),
+('UNIVERSITY', 'Universities & Colleges', 'university', 'Central & State Universities, Non-Teaching & Faculty cadres'),
+('STATE_PSC', 'State PSC', 'state-psc', 'BPSC, UPPSC, KPSC, MPSC, TNPSC, APPSC and other State Public Service Commissions'),
+('OTHER', 'Other Autonomous Bodies', 'other', 'Statutory councils, research institutes, autonomous regulatory authorities')
+ON CONFLICT (code) DO NOTHING;
+
 

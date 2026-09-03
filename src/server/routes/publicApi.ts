@@ -162,4 +162,96 @@ router.get('/jobs/:slugOrId', publicApiRateLimiter, async (req: Request, res: Re
   }
 });
 
+// In-memory store for registered client notification preferences & device subscriptions
+const clientNotificationSubscriptions: Map<string, {
+  id: string;
+  categories: string[];
+  states: string[];
+  alertTypes: Record<string, boolean>;
+  soundEnabled: boolean;
+  minVacanciesOnly?: boolean;
+  minVacanciesThreshold?: number;
+  ip: string;
+  updatedAt: string;
+}> = new Map();
+
+/**
+ * Public User Notification Preferences Sync
+ */
+router.post('/notifications/preferences', publicApiRateLimiter, (req: Request, res: Response) => {
+  try {
+    const { categories, states, alertTypes, soundEnabled, minVacanciesOnly, minVacanciesThreshold } = req.body || {};
+    const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
+
+    const safeCategories = Array.isArray(categories)
+      ? categories.map((c: any) => String(c).slice(0, 50)).filter(Boolean)
+      : ['UPSC', 'SSC', 'Railway', 'Police', 'Banking'];
+    const safeStates = Array.isArray(states)
+      ? states.map((s: any) => String(s).slice(0, 50)).filter(Boolean)
+      : ['ALL'];
+
+    const subscriptionRecord = {
+      id: `sub_${ip.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 32)}`,
+      categories: safeCategories,
+      states: safeStates,
+      alertTypes: typeof alertTypes === 'object' && alertTypes !== null ? alertTypes : { newVacancies: true, admitCards: true, results: true, answerKeys: true, closingSoon: true },
+      soundEnabled: Boolean(soundEnabled),
+      minVacanciesOnly: Boolean(minVacanciesOnly),
+      minVacanciesThreshold: typeof minVacanciesThreshold === 'number' ? minVacanciesThreshold : 50,
+      ip,
+      updatedAt: new Date().toISOString(),
+    };
+
+    clientNotificationSubscriptions.set(subscriptionRecord.id, subscriptionRecord);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification preferences synchronized securely',
+      subscriptionId: subscriptionRecord.id,
+      activeCategories: safeCategories.length,
+      activeStates: safeStates.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to record notification preferences' });
+  }
+});
+
+/**
+ * Generate a Tailored Notification Payload for Testing or Preview
+ */
+router.post('/notifications/test-payload', publicApiRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const { category, state } = req.body || {};
+    const allJobs = await getAllActiveJobs();
+
+    // Find a matching sample job
+    let sample = allJobs.find((j) => {
+      const matchCat = !category || category === 'All' || (j as any).central_category === category || (j as any).category === category;
+      const matchState = !state || state === 'ALL' || (j.state_code && j.state_code.toUpperCase() === String(state).toUpperCase()) || (j.state_name && j.state_name.toLowerCase() === String(state).toLowerCase());
+      return matchCat && matchState;
+    });
+
+    if (!sample && allJobs.length > 0) {
+      sample = allJobs[0];
+    }
+
+    const payload = {
+      title: 'StudyMate Sarkari Alert',
+      body: sample
+        ? `New Vacancy: ${sample.post_name || sample.title} (${sample.organization_name}) - Apply before ${sample.important_dates?.applyEndDate || 'due date'}.`
+        : 'Tailored alert active. You will receive notifications when new matching forms release.',
+      category: category || 'All India',
+      state: state || 'All India',
+      url: sample ? `/jobs/${sample.slug || sample.id}` : '/jobs',
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      timestamp: new Date().toISOString(),
+    };
+
+    res.json({ success: true, payload });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate test payload' });
+  }
+});
+
 export default router;

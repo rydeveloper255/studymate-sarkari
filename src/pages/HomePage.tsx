@@ -21,6 +21,7 @@ import {
 import { MetaTags } from '../components/seo/MetaTags';
 import { generateWebsiteSchema, generateOrganizationSchema } from '../lib/seo/structuredData';
 import { QuickSearchBar } from '../components/search/QuickSearchBar';
+import { JobAlertBanner } from '../components/notifications/JobAlertBanner';
 import { VacancyCard } from '../components/cards/VacancyCard';
 import { StateCard } from '../components/cards/StateCard';
 import { UpdateCard } from '../components/cards/UpdateCard';
@@ -196,6 +197,9 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       </section>
+
+      {/* Tailored Job Alert Preference Banner */}
+      <JobAlertBanner />
 
       {/* 2. QUICK CATEGORY CARDS */}
       <section className="space-y-4">

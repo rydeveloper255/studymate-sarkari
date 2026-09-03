@@ -13,12 +13,15 @@ import {
   X,
   Sparkles,
   ChevronDown,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { useNotificationPreferences } from '../../lib/notifications/NotificationContext';
 
 export const Header: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { preferences, permissionState, openPreferencesModal } = useNotificationPreferences();
 
   const navLinks = [
     { name: 'Home', path: '/' },
@@ -29,6 +32,7 @@ export const Header: React.FC = () => {
     { name: 'Results', path: '/results' },
     { name: 'Answer Key', path: '/answer-key' },
     { name: 'Updates', path: '/updates' },
+    { name: 'Alerts', path: '/notifications' },
   ];
 
   const handleMobileNavClick = () => {
@@ -97,16 +101,25 @@ export const Header: React.FC = () => {
               <span className="hidden sm:inline">Quick Search</span>
             </Link>
 
-            {/* Notification Indicator Placeholder (Step 1 requirement) */}
-            <Link
-              to="/updates"
-              className="relative p-2 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 hover:text-cyan-400 hover:border-slate-600 transition-colors"
-              aria-label="Important updates"
-              title="Recent recruitment updates"
+            {/* Notification Indicator & Preferences Trigger */}
+            <button
+              type="button"
+              onClick={openPreferencesModal}
+              className="relative p-2 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 hover:text-cyan-400 hover:border-cyan-500/50 transition-all group"
+              aria-label="Job alert preferences"
+              title={`Notification Preferences: ${preferences.categories.length} categories, ${preferences.states.includes('ALL') ? 'All India' : `${preferences.states.length} states`}`}
             >
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            </Link>
+              <Bell className="w-4 h-4 group-hover:scale-110 transition-transform" />
+              {preferences.enabled && (
+                <span
+                  className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ${
+                    permissionState === 'granted'
+                      ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
+                      : 'bg-cyan-400 animate-pulse'
+                  }`}
+                />
+              )}
+            </button>
 
             {/* Mobile Menu Toggle Button */}
             <button

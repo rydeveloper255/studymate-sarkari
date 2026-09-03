@@ -4,6 +4,8 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { MobileBottomNav } from './MobileBottomNav';
 import { LiveTicker } from '../ui/LiveTicker';
+import { NotificationPreferencesModal } from '../notifications/NotificationPreferencesModal';
+import { NotificationToast } from '../notifications/NotificationToast';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -35,6 +37,10 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Dedicated Mobile Bottom Navigation (Hidden on Desktop) */}
       <MobileBottomNav />
+
+      {/* Global Tailored Notification Components */}
+      <NotificationPreferencesModal />
+      <NotificationToast />
     </div>
   );
 };

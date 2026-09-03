@@ -53,87 +53,99 @@ export function formatVacancyMessage(
 ): TelegramMessagePayload {
   const isDbJob = 'total_vacancies' in job;
 
-  const title = isDbJob ? job.title : job.title;
+  const title = isDbJob ? (job.post_name || job.title) : (job.postName || job.title);
   const org = isDbJob ? job.organization_name : job.organizationName;
   const sector = isDbJob ? job.sector : job.sector;
   const stateName = isDbJob ? job.state_name : job.stateName;
   const totalVacancies = isDbJob ? job.total_vacancies : job.totalVacancies;
   const qualification = isDbJob ? job.qualification : job.qualification;
   const importantDates = isDbJob ? job.important_dates : job.importantDates;
-  const appFee = isDbJob ? job.application_fee : job.applicationFee;
-  const selectionProcess = isDbJob ? job.selection_process : job.selectionProcess;
   const notifUrl = isDbJob ? job.official_notification_url : job.officialNotificationUrl;
   const applyUrl = isDbJob ? job.official_apply_url : job.officialApplyUrl;
   const id = isDbJob ? job.id : (job.slug || job.deduplicationKey);
+  const slug = isDbJob ? (job.slug || job.id) : (job.slug || job.deduplicationKey);
+  const category = isDbJob ? (job.central_category || (job.sector === 'central' ? 'Central Government' : 'State Government')) : (job.centralCategory || (job.sector === 'central' ? 'Central Government' : 'State Government'));
+
+  // Website base URL resolution
+  const websiteBaseUrl = process.env.PUBLIC_WEBSITE_URL || process.env.RENDER_EXTERNAL_URL || 'https://studymatesarkari.onrender.com';
+  const websiteJobUrl = `${websiteBaseUrl.replace(/\/$/, '')}/jobs/${slug}`;
+
+  // Region derivation
+  let region: string | undefined;
+  if (sector === 'central') {
+    region = 'All India';
+  } else if (stateName && stateName.trim()) {
+    region = stateName.trim();
+  }
+
+  // End Date resolution
+  const lastDate = importantDates?.applyEndDate || (isDbJob && 'application_end' in (job as any) ? (job as any).application_end : undefined);
+
+  // Qualification resolution
+  let qualStr: string | undefined;
+  const rawQual: unknown = qualification;
+  if (Array.isArray(rawQual) && rawQual.length > 0) {
+    qualStr = rawQual.filter(Boolean).slice(0, 3).join(', ');
+  } else if (typeof rawQual === 'string' && rawQual.trim()) {
+    qualStr = rawQual.trim();
+  }
 
   const lines: string[] = [];
 
-  lines.push(`🆕 <b>NEW GOVERNMENT JOB</b>\n`);
-  lines.push(`📌 <b>${escapeTelegramHtml(title)}</b>\n`);
-  lines.push(`🏢 <b>Organization:</b> ${escapeTelegramHtml(org)}`);
+  lines.push(`<b>StudyMate Sarkari</b>\n`);
+  lines.push(`<b>New Government Recruitment</b>\n`);
 
-  // Location / Scope
-  if (sector === 'central') {
-    lines.push(`📍 <b>Location/Scope:</b> All India (Central Government)`);
-  } else if (stateName) {
-    lines.push(`📍 <b>Location/Scope:</b> State Govt (${escapeTelegramHtml(stateName)})`);
-  } else {
-    lines.push(`📍 <b>Location/Scope:</b> State Government`);
+  if (org && org.trim()) {
+    lines.push(`<b>Organization:</b>\n${escapeTelegramHtml(org.trim())}\n`);
   }
 
-  // Vacancies
-  if (totalVacancies && totalVacancies !== 'N/A' && totalVacancies !== '0') {
-    lines.push(`👥 <b>Total Vacancies:</b> ${escapeTelegramHtml(String(totalVacancies))}`);
+  if (title && title.trim()) {
+    lines.push(`<b>Post:</b>\n${escapeTelegramHtml(title.trim())}\n`);
   }
 
-  // Qualification
-  if (Array.isArray(qualification) && qualification.length > 0) {
-    const qualText = qualification.slice(0, 2).join(' / ');
-    lines.push(`🎓 <b>Qualification:</b> ${escapeTelegramHtml(qualText)}`);
+  if (totalVacancies && String(totalVacancies).trim() && String(totalVacancies) !== 'N/A' && String(totalVacancies) !== '0') {
+    lines.push(`<b>Vacancies:</b>\n${escapeTelegramHtml(String(totalVacancies).trim())}\n`);
   }
 
-  // Important Dates
-  if (importantDates?.applyStartDate || importantDates?.applyEndDate) {
-    const start = importantDates.applyStartDate || 'Immediate';
-    const end = importantDates.applyEndDate || 'Refer Notification';
-    lines.push(`📅 <b>Application Window:</b> ${escapeTelegramHtml(start)} to ${escapeTelegramHtml(end)}`);
+  if (qualStr && qualStr !== 'Refer to official notification for eligibility details.') {
+    lines.push(`<b>Qualification:</b>\n${escapeTelegramHtml(qualStr)}\n`);
   }
 
-  // Fee Details
-  if (appFee && (appFee.general || appFee.scStPh)) {
-    const feeStr = `Gen/OBC: ₹${appFee.general || '0'} | SC/ST/PH: ₹${appFee.scStPh || '0'}`;
-    lines.push(`💰 <b>Application Fee:</b> ${escapeTelegramHtml(feeStr)}`);
+  if (lastDate && lastDate.trim() && lastDate !== 'Refer Notification') {
+    lines.push(`<b>Last Date:</b>\n${escapeTelegramHtml(lastDate.trim())}\n`);
   }
 
-  // Selection
-  if (Array.isArray(selectionProcess) && selectionProcess.length > 0) {
-    const selStr = selectionProcess.slice(0, 2).join(' ➔ ');
-    lines.push(`📝 <b>Selection:</b> ${escapeTelegramHtml(selStr)}`);
+  if (category && category.trim()) {
+    lines.push(`<b>Category:</b>\n${escapeTelegramHtml(category.trim())}\n`);
   }
 
-  // Official URLs in message body
+  if (region && region.trim()) {
+    lines.push(`<b>Region:</b>\n${escapeTelegramHtml(region.trim())}\n`);
+  }
+
+  if (isValidOfficialUrl(applyUrl)) {
+    lines.push(`<b>Apply:</b>\n${escapeTelegramHtml(applyUrl!)}\n`);
+  }
+
   if (isValidOfficialUrl(notifUrl)) {
-    lines.push(`\n🔗 <b>Official Notification:</b>\n${escapeTelegramHtml(notifUrl)}`);
-  }
-  if (isValidOfficialUrl(applyUrl) && applyUrl !== notifUrl) {
-    lines.push(`🌐 <b>Apply Online:</b>\n${escapeTelegramHtml(applyUrl)}`);
+    lines.push(`<b>Official Notification:</b>\n${escapeTelegramHtml(notifUrl!)}\n`);
   }
 
-  lines.push(`\n━━━━━━━━━━━━━━━━━━━━`);
-  lines.push(`⚡ <b>StudyMate Sarkari</b> — Verified Official Updates`);
+  lines.push(`<b>StudyMate Sarkari:</b>\n${escapeTelegramHtml(websiteJobUrl)}`);
 
-  const formattedText = lines.join('\n');
+  const formattedText = lines.join('\n').trim();
 
-  // Inline keyboard buttons
+  // Inline keyboard buttons for immediate one-click mobile actions
   const buttonRow: TelegramInlineButton[] = [];
-  if (isValidOfficialUrl(notifUrl)) {
-    buttonRow.push({ text: '📄 Official Notification', url: notifUrl! });
-  }
   if (isValidOfficialUrl(applyUrl)) {
     buttonRow.push({ text: '🌐 Apply Online', url: applyUrl! });
   }
+  if (isValidOfficialUrl(notifUrl)) {
+    buttonRow.push({ text: '📄 Notification', url: notifUrl! });
+  }
+  buttonRow.push({ text: '⚡ StudyMate Page', url: websiteJobUrl });
 
-  const buttons: TelegramInlineButton[][] = buttonRow.length > 0 ? [buttonRow] : [];
+  const buttons: TelegramInlineButton[][] = [buttonRow];
   const destinationChatId = options.destinationChatId || process.env.TELEGRAM_DEFAULT_CHAT_ID || 'default';
   const idempotencyKey = `government_jobs:${id}:NEW_VACANCY:${destinationChatId}`;
 
@@ -141,8 +153,8 @@ export function formatVacancyMessage(
     notificationType: 'NEW_VACANCY',
     targetType: 'government_jobs',
     targetId: id,
-    title,
-    organization: org,
+    title: title || org || 'New Recruitment',
+    organization: org || 'Government Recruitment Board',
     formattedText,
     buttons,
     destinationChatId,

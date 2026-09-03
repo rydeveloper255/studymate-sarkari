@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Briefcase, Search, Sparkles, Filter, ChevronLeft, ChevronRight, Database } from 'lucide-react';
 import { MetaTags } from '../components/seo/MetaTags';
 import { generateBreadcrumbSchema } from '../lib/seo/structuredData';
+import { JobAlertBanner } from '../components/notifications/JobAlertBanner';
 import { VacancyCard } from '../components/cards/VacancyCard';
 import { JobFilters } from '../components/filters/JobFilters';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -121,6 +122,9 @@ export const LatestJobsPage: React.FC = () => {
           Comprehensive list of active recruitment opportunities across Central Ministries, Public Sector Undertakings (PSUs), and State Government commissions.
         </p>
       </div>
+
+      {/* Tailored Job Alert Preference Banner */}
+      <JobAlertBanner />
 
       {/* Filter Section */}
       <JobFilters

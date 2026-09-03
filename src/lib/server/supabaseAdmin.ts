@@ -1079,7 +1079,32 @@ export async function findTelegramNotificationLog(
         return data as DbTelegramNotificationLog;
       }
     } catch (err) {
-      console.warn('[Server Admin] Querying telegram_notification_log error:', err);
+      // Fallback check on telegram_notifications if table exists
+      try {
+        const { data: altData, error: altError } = await client
+          .from('telegram_notifications')
+          .select('*')
+          .eq('idempotency_key', idempotencyKey)
+          .maybeSingle();
+        if (!altError && altData) {
+          return {
+            id: altData.id,
+            target_type: altData.job_id ? 'government_jobs' : 'exam_updates',
+            target_id: altData.job_id || altData.update_id || '',
+            notification_type: altData.message_type || 'NEW_VACANCY',
+            destination_chat_id: altData.telegram_chat_id || 'default',
+            idempotency_key: altData.idempotency_key,
+            message_hash: '',
+            telegram_message_id: altData.telegram_message_id,
+            status: altData.status,
+            attempt_count: 1,
+            sent_at: altData.sent_at,
+            created_at: altData.created_at,
+          } as DbTelegramNotificationLog;
+        }
+      } catch {
+        // Fall through to memory
+      }
     }
   }
 
@@ -1121,10 +1146,30 @@ export async function saveTelegramNotificationLog(
 
       if (!error && data) {
         inMemoryTelegramLogs.set(entry.idempotency_key, data as DbTelegramNotificationLog);
-        return data as DbTelegramNotificationLog;
       }
     } catch (err) {
       console.warn('[Server Admin] Upserting telegram_notification_log error:', err);
+    }
+
+    // Also best-effort write to normalized telegram_notifications table
+    try {
+      await client.from('telegram_notifications').upsert(
+        {
+          id: entry.id,
+          job_id: entry.target_type === 'government_jobs' ? entry.target_id : null,
+          update_id: entry.target_type !== 'government_jobs' ? entry.target_id : null,
+          telegram_chat_id: entry.destination_chat_id,
+          message_type: entry.notification_type,
+          sent_at: entry.sent_at,
+          telegram_message_id: entry.telegram_message_id,
+          idempotency_key: entry.idempotency_key,
+          status: entry.status,
+          created_at: entry.created_at,
+        },
+        { onConflict: 'idempotency_key' }
+      );
+    } catch {
+      // Best-effort normalized mirror
     }
   }
 

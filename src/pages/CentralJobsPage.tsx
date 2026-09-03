@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, Shield, Train, Landmark, Compass, Mail, Factory, Layers } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { Building2, Shield, Train, Landmark, Compass, Mail, Factory, Layers, Siren, GraduationCap } from 'lucide-react';
 import { MetaTags } from '../components/seo/MetaTags';
 import { generateBreadcrumbSchema } from '../lib/seo/structuredData';
 import { VacancyCard } from '../components/cards/VacancyCard';
@@ -11,6 +12,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { JobVacancy } from '../types';
 
 export const CentralJobsPage: React.FC = () => {
+  const { category: routeCategory } = useParams<{ category?: string }>();
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [centralJobs, setCentralJobs] = useState<JobVacancy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,12 +23,31 @@ export const CentralJobsPage: React.FC = () => {
     { label: 'UPSC', value: 'UPSC', icon: <Building2 className="w-4 h-4" />, desc: 'IAS, IPS, IFS, CDS, NDA' },
     { label: 'SSC', value: 'SSC', icon: <Compass className="w-4 h-4" />, desc: 'CGL, CHSL, MTS, GD, CPO' },
     { label: 'Railway', value: 'Railway', icon: <Train className="w-4 h-4" />, desc: 'RRB NTPC, ALP, Group D' },
+    { label: 'Police', value: 'Police', icon: <Siren className="w-4 h-4" />, desc: 'CAPF, CRPF, BSF, CISF, Police' },
     { label: 'Banking', value: 'Banking', icon: <Landmark className="w-4 h-4" />, desc: 'SBI, IBPS, RBI, NABARD' },
     { label: 'Defence', value: 'Defence', icon: <Shield className="w-4 h-4" />, desc: 'Army, Navy, Air Force, Coast Guard' },
+    { label: 'Teaching', value: 'Teaching', icon: <GraduationCap className="w-4 h-4" />, desc: 'KVS, NVS, CTET, UGC' },
     { label: 'Postal', value: 'Postal', icon: <Mail className="w-4 h-4" />, desc: 'India Post GDS, Mail Guard' },
     { label: 'Public Sector', value: 'Public Sector', icon: <Factory className="w-4 h-4" />, desc: 'ONGC, BHEL, NTPC, SAIL, IOCL' },
     { label: 'Other Central', value: 'Other Central Government', icon: <Building2 className="w-4 h-4" />, desc: 'Autonomous bodies & councils' },
   ];
+
+  // Sync category if navigated from route e.g. /exams/ssc, /exams/railway, /exams/police
+  useEffect(() => {
+    if (routeCategory) {
+      const lower = routeCategory.toLowerCase().trim();
+      const matched = categories.find(
+        (c) => c.value.toLowerCase() === lower || c.label.toLowerCase() === lower
+      );
+      if (matched) {
+        setSelectedCategory(matched.value);
+      } else if (lower === 'railways' || lower === 'rrb') {
+        setSelectedCategory('Railway');
+      } else if (lower === 'police-defence') {
+        setSelectedCategory('Police');
+      }
+    }
+  }, [routeCategory]);
 
   useEffect(() => {
     let isMounted = true;

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Briefcase, MapPin, BellRing, MoreHorizontal } from 'lucide-react';
+import { Home, Briefcase, MapPin, Bell, BellRing } from 'lucide-react';
 
 export const MobileBottomNav: React.FC = () => {
   const navItems = [
@@ -20,14 +20,14 @@ export const MobileBottomNav: React.FC = () => {
       icon: MapPin,
     },
     {
+      name: 'Alerts',
+      path: '/notifications',
+      icon: Bell,
+    },
+    {
       name: 'Updates',
       path: '/updates',
       icon: BellRing,
-    },
-    {
-      name: 'More',
-      path: '/search',
-      icon: MoreHorizontal,
     },
   ];
 

@@ -333,3 +333,108 @@ export interface DataFetchOptions {
   status?: string;
   sortBy?: 'latest' | 'last_date' | 'vacancies';
 }
+
+// ==============================================================================
+// NORMALIZED CENTRAL GOVERNMENT JOB PIPELINE SCHEMAS
+// ==============================================================================
+
+export interface DbJobRegion {
+  id: string;
+  code: string;
+  name: string;
+  slug: string;
+  type: 'all_india' | 'state' | 'ut';
+  capital?: string | null;
+  zone?: string | null;
+  total_active_vacancies_count?: number;
+  created_at?: string;
+}
+
+export interface DbJobCategory {
+  id: string;
+  code: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  created_at?: string;
+}
+
+export interface DbJobCategoryMap {
+  job_id: string;
+  category_id: string;
+}
+
+export interface DbJobSource {
+  id: string;
+  name: string;
+  organization: string;
+  region?: string | null;
+  source_type: string;
+  official_url: string;
+  recruitment_url?: string | null;
+  category: string[];
+  active: boolean;
+  last_checked_at?: string | null;
+  last_success_at?: string | null;
+  last_error?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ExamUpdateType =
+  | 'recruitment'
+  | 'exam_notice'
+  | 'admit_card'
+  | 'result'
+  | 'answer_key'
+  | 'cutoff'
+  | 'selection_list'
+  | 'other';
+
+export interface DbExamUpdate {
+  id: string;
+  title: string;
+  update_type: ExamUpdateType;
+  organization: string;
+  update_date: string;
+  summary: string;
+  official_url?: string | null;
+  link_url?: string | null;
+  badge_tag?: string | null;
+  is_high_priority?: boolean;
+  is_verified?: boolean;
+  status?: string;
+  job_id?: string | null;
+  created_at?: string;
+}
+
+export interface DbSourceFetchLog {
+  id: string;
+  source_id?: string | null;
+  requested_url: string;
+  final_url: string;
+  fetched_at: string;
+  http_status?: number | null;
+  success: boolean;
+  changed: boolean;
+  content_hash?: string | null;
+  content_type?: string | null;
+  content_length?: number | null;
+  response_time_ms?: number | null;
+  error_code?: string | null;
+  error_message?: string | null;
+  created_at?: string;
+}
+
+export interface DbTelegramNotification {
+  id: string;
+  job_id?: string | null;
+  update_id?: string | null;
+  telegram_chat_id: string;
+  message_type: string;
+  sent_at?: string | null;
+  telegram_message_id?: number | null;
+  idempotency_key: string;
+  status: 'QUEUED' | 'SENT' | 'FAILED' | 'SKIPPED_DUPLICATE' | 'SKIPPED_INELIGIBLE' | 'DRY_RUN_SUCCESS' | 'DISABLED';
+  created_at?: string;
+}

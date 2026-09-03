@@ -161,21 +161,24 @@ export const Footer: React.FC = () => {
           </p>
         </div>
 
-        {/* Bottom copyright line */}
-        <div className="pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
-          <p>© {new Date().getFullYear()} StudyMate Sarkari. All rights reserved. Step 1 Foundation.</p>
-          <div className="flex items-center gap-6">
-            <Link to="/about" className="hover:text-slate-200 transition-colors">
-              About
-            </Link>
-            <Link to="/contact" className="hover:text-slate-200 transition-colors">
-              Contact & Support
-            </Link>
-            <Link to="/search" className="hover:text-slate-200 transition-colors">
-              Search Portal
-            </Link>
+          {/* Bottom copyright line */}
+          <div className="pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+            <p>© {new Date().getFullYear()} StudyMate Sarkari. All rights reserved.</p>
+            <div className="flex flex-wrap items-center gap-6">
+              <Link to="/notifications" className="text-cyan-400 hover:text-cyan-300 transition-colors font-medium">
+                🔔 Alert Preferences
+              </Link>
+              <Link to="/about" className="hover:text-slate-200 transition-colors">
+                About
+              </Link>
+              <Link to="/contact" className="hover:text-slate-200 transition-colors">
+                Contact & Support
+              </Link>
+              <Link to="/search" className="hover:text-slate-200 transition-colors">
+                Search Portal
+              </Link>
+            </div>
           </div>
-        </div>
       </div>
     </footer>
   );
