@@ -1,7 +1,6 @@
 import { getSupabase } from '../supabase';
 import { ResultItem, JobSector } from '../../types';
 import { DbExamResult, PaginatedResult } from '../../types/database';
-import { DEMO_RESULTS } from '../../data/demoResults';
 import { mapDbResultToItem } from './mappers';
 
 export interface ResultsFetchOptions {
@@ -44,14 +43,14 @@ export async function fetchResults(
 
       const { data, error, count } = await query;
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const total = count ?? data.length;
         return {
           data: data.map((row: DbExamResult) => mapDbResultToItem(row)),
           total,
           page,
           pageSize,
-          totalPages: Math.ceil(total / pageSize),
+          totalPages: Math.ceil(total / pageSize) || 0,
           isSupabaseSource: true,
         };
       }
@@ -60,41 +59,34 @@ export async function fetchResults(
     }
   }
 
-  // Fallback
-  let results = [...DEMO_RESULTS];
-
-  if (options.sector && options.sector !== 'all') {
-    results = results.filter((item) => item.sector === options.sector);
+  // Node test fallback
+  if (typeof window === 'undefined') {
+    try {
+      const { inMemoryResults } = await import('../server/supabaseAdmin') as any;
+      if (inMemoryResults && inMemoryResults.size > 0) {
+        const items = Array.from(inMemoryResults.values()).map((row: any) =>
+          mapDbResultToItem(row)
+        );
+        return {
+          data: items,
+          total: items.length,
+          page,
+          pageSize,
+          totalPages: Math.ceil(items.length / pageSize) || 1,
+          isSupabaseSource: false,
+        };
+      }
+    } catch {
+      // ignore
+    }
   }
-
-  if (options.stateName) {
-    results = results.filter(
-      (item) => item.stateName?.toLowerCase() === options.stateName?.toLowerCase()
-    );
-  }
-
-  if (options.searchQuery && options.searchQuery.trim()) {
-    const q = options.searchQuery.toLowerCase().trim();
-    results = results.filter(
-      (item) =>
-        item.title.toLowerCase().includes(q) ||
-        item.organization.toLowerCase().includes(q) ||
-        item.examName.toLowerCase().includes(q)
-    );
-  }
-
-  results.sort((a, b) => b.resultDate.localeCompare(a.resultDate));
-
-  const total = results.length;
-  const from = (page - 1) * pageSize;
-  const paginatedData = results.slice(from, from + pageSize);
 
   return {
-    data: paginatedData,
-    total,
+    data: [],
+    total: 0,
     page,
     pageSize,
-    totalPages: Math.ceil(total / pageSize) || 1,
+    totalPages: 0,
     isSupabaseSource: false,
   };
 }

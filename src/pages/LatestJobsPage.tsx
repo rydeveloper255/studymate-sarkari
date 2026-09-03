@@ -113,10 +113,8 @@ export const LatestJobsPage: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white font-display">
             Latest Government Jobs
           </h1>
-          {isSupabaseSource ? (
+          {isSupabaseSource && (
             <Badge variant="success">Supabase Live ({totalCount})</Badge>
-          ) : (
-            <Badge variant="demo">Data Layer ({totalCount})</Badge>
           )}
         </div>
         <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">

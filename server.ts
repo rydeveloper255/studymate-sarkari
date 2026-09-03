@@ -20,6 +20,7 @@ import publicApiRoutes from './src/server/routes/publicApi';
 import internalFetchRoutes from './src/server/routes/internalFetch';
 import internalTelegramRoutes from './src/server/routes/internalTelegram';
 import internalAutomationRoutes from './src/server/routes/internalAutomation';
+import { verifyTelegramBotConnection } from './src/lib/telegramHealth';
 
 async function startServer() {
   const app = express();
@@ -111,14 +112,60 @@ async function startServer() {
   });
 
   // Health and Public API Routes
-  app.get('/api/health', (req: Request, res: Response) => {
-    res.json({
+  app.get('/api/health', async (req: Request, res: Response) => {
+    let telegramStatus: 'connected' | 'not_configured' | 'error' = 'not_configured';
+    let botName: string | undefined;
+
+    try {
+      const tgHealth = await verifyTelegramBotConnection();
+      telegramStatus = tgHealth.status;
+      if (tgHealth.ok && tgHealth.bot?.username) {
+        botName = tgHealth.bot.username;
+      }
+    } catch {
+      telegramStatus = 'error';
+    }
+
+    const payload: Record<string, any> = {
       status: 'ok',
       app: 'StudyMate Sarkari',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
-    });
+      telegram: telegramStatus,
+    };
+
+    if (botName) {
+      payload.bot = botName;
+    }
+
+    res.json(payload);
+  });
+
+  // Dedicated Telegram Health Check Endpoint
+  app.get('/api/health/telegram', async (req: Request, res: Response) => {
+    try {
+      const tgHealth = await verifyTelegramBotConnection();
+      const payload: Record<string, any> = {
+        status: tgHealth.ok ? 'ok' : 'error',
+        telegram: tgHealth.status,
+      };
+      if (tgHealth.bot?.username) {
+        payload.bot = tgHealth.bot.username;
+      }
+      if (tgHealth.bot?.id) {
+        payload.botId = tgHealth.bot.id;
+      }
+      if (tgHealth.error) {
+        payload.message = tgHealth.error;
+      }
+      res.status(tgHealth.status === 'error' ? 502 : 200).json(payload);
+    } catch {
+      res.status(500).json({
+        status: 'error',
+        telegram: 'error',
+      });
+    }
   });
 
   app.use('/api/v1', publicApiRoutes);

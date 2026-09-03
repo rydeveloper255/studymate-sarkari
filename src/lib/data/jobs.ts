@@ -1,7 +1,6 @@
 import { getSupabase } from '../supabase';
 import { JobVacancy, JobFilterState } from '../../types';
 import { DbGovernmentJob, PaginatedResult, DataFetchOptions } from '../../types/database';
-import { DEMO_VACANCIES, getJobById as getLocalJobById } from '../../data/demoJobs';
 import { mapDbJobToVacancy } from './mappers';
 
 /**
@@ -72,72 +71,69 @@ export async function fetchJobs(
           total,
           page,
           pageSize,
-          totalPages: Math.ceil(total / pageSize),
+          totalPages: Math.ceil(total / pageSize) || 0,
           isSupabaseSource: true,
         };
       }
     } catch (err) {
-      console.warn('[Data Layer] Supabase job query error, using verified local data fallback:', err);
+      console.warn('[Data Layer] Supabase job query error:', err);
     }
   }
 
-  // Fallback to local verified demo dataset
-  let results = [...DEMO_VACANCIES];
+  // In test / offline server pipeline environment, read verified records from admin publisher store
+  if (typeof window === 'undefined') {
+    try {
+      const { getAllActiveJobs } = await import('../server/supabaseAdmin');
+      const activeJobs = await getAllActiveJobs();
+      if (activeJobs && activeJobs.length > 0) {
+        let results = activeJobs.map((j) => mapDbJobToVacancy(j));
 
-  if (options.sector && options.sector !== 'all') {
-    results = results.filter((j) => j.sector === options.sector);
+        if (options.sector && options.sector !== 'all') {
+          results = results.filter((j) => j.sector === options.sector);
+        }
+        if (options.state) {
+          results = results.filter(
+            (j) => j.stateCode?.toLowerCase() === options.state?.toLowerCase()
+          );
+        }
+        if (options.centralCategory && options.centralCategory !== 'All') {
+          results = results.filter((j) => j.centralCategory === options.centralCategory);
+        }
+        if (options.status) {
+          results = results.filter((j) => j.status === options.status);
+        }
+        if (options.searchQuery && options.searchQuery.trim()) {
+          const q = options.searchQuery.toLowerCase().trim();
+          results = results.filter(
+            (j) =>
+              j.title.toLowerCase().includes(q) ||
+              j.organization.toLowerCase().includes(q) ||
+              j.postName.toLowerCase().includes(q)
+          );
+        }
+
+        const total = results.length;
+        const from = (page - 1) * pageSize;
+        return {
+          data: results.slice(from, from + pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 1,
+          isSupabaseSource: false,
+        };
+      }
+    } catch {
+      // In browser or admin store unavailable
+    }
   }
-
-  if (options.state) {
-    results = results.filter(
-      (j) => j.stateCode?.toLowerCase() === options.state?.toLowerCase()
-    );
-  }
-
-  if (options.centralCategory && options.centralCategory !== 'All') {
-    results = results.filter((j) => j.centralCategory === options.centralCategory);
-  }
-
-  if (options.status) {
-    results = results.filter((j) => j.status === options.status);
-  }
-
-  if (options.searchQuery && options.searchQuery.trim()) {
-    const q = options.searchQuery.toLowerCase().trim();
-    results = results.filter(
-      (j) =>
-        j.title.toLowerCase().includes(q) ||
-        j.organization.toLowerCase().includes(q) ||
-        j.postName.toLowerCase().includes(q) ||
-        (j.stateName && j.stateName.toLowerCase().includes(q))
-    );
-  }
-
-  // Sorting
-  if (options.sortBy === 'last_date') {
-    results.sort((a, b) =>
-      a.importantDates.applyEndDate.localeCompare(b.importantDates.applyEndDate)
-    );
-  } else if (options.sortBy === 'vacancies') {
-    results.sort((a, b) => {
-      const numA = typeof a.totalVacancies === 'number' ? a.totalVacancies : parseInt(String(a.totalVacancies).replace(/[^0-9]/g, '')) || 0;
-      const numB = typeof b.totalVacancies === 'number' ? b.totalVacancies : parseInt(String(b.totalVacancies).replace(/[^0-9]/g, '')) || 0;
-      return numB - numA;
-    });
-  } else {
-    results.sort((a, b) => b.publishedDate.localeCompare(a.publishedDate));
-  }
-
-  const total = results.length;
-  const from = (page - 1) * pageSize;
-  const paginatedData = results.slice(from, from + pageSize);
 
   return {
-    data: paginatedData,
-    total,
+    data: [],
+    total: 0,
     page,
     pageSize,
-    totalPages: Math.ceil(total / pageSize) || 1,
+    totalPages: 0,
     isSupabaseSource: false,
   };
 }
@@ -166,9 +162,20 @@ export async function fetchJobBySlugOrId(slugOrId: string): Promise<JobVacancy |
     }
   }
 
-  // Local fallback
-  const localJob = getLocalJobById(slugOrId);
-  return localJob || null;
+  // Server test fallback
+  if (typeof window === 'undefined') {
+    try {
+      const { getJobBySlugOrId } = await import('../server/supabaseAdmin');
+      const job = await getJobBySlugOrId(slugOrId);
+      if (job) {
+        return mapDbJobToVacancy(job);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -246,24 +253,37 @@ export async function fetchJobStats(): Promise<{
         .eq('status', 'Closing Soon')
         .eq('is_active', true);
 
-      if (totalActive !== null && totalActive > 0) {
-        return {
-          totalActive: totalActive || 0,
-          centralCount: centralCount || 0,
-          stateCount: stateCount || 0,
-          closingSoonCount: closingSoonCount || 0,
-        };
-      }
+      return {
+        totalActive: totalActive || 0,
+        centralCount: centralCount || 0,
+        stateCount: stateCount || 0,
+        closingSoonCount: closingSoonCount || 0,
+      };
     } catch (err) {
       console.warn('[Data Layer] Supabase job stats error:', err);
     }
   }
 
-  // Demo counts
+  // Server test fallback
+  if (typeof window === 'undefined') {
+    try {
+      const { getAllActiveJobs } = await import('../server/supabaseAdmin');
+      const activeJobs = await getAllActiveJobs();
+      return {
+        totalActive: activeJobs.length,
+        centralCount: activeJobs.filter((j) => j.sector === 'central').length,
+        stateCount: activeJobs.filter((j) => j.sector === 'state').length,
+        closingSoonCount: activeJobs.filter((j) => j.status === 'Closing Soon').length,
+      };
+    } catch {
+      // ignore
+    }
+  }
+
   return {
-    totalActive: DEMO_VACANCIES.length,
-    centralCount: DEMO_VACANCIES.filter((j) => j.sector === 'central').length,
-    stateCount: DEMO_VACANCIES.filter((j) => j.sector === 'state').length,
-    closingSoonCount: DEMO_VACANCIES.filter((j) => j.status === 'Closing Soon').length,
+    totalActive: 0,
+    centralCount: 0,
+    stateCount: 0,
+    closingSoonCount: 0,
   };
 }

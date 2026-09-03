@@ -31,7 +31,16 @@ const DEFAULT_DEV_SECRET = 'studymate-internal-dev-secret';
  * Authentication middleware for internal endpoints.
  */
 function authenticateInternal(req: Request, res: Response, next: NextFunction) {
-  const configuredSecret = process.env.SOURCE_FETCH_SECRET || DEFAULT_DEV_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const configuredSecret = process.env.SOURCE_FETCH_SECRET || (isProduction ? undefined : DEFAULT_DEV_SECRET);
+
+  if (!configuredSecret) {
+    res.status(401).json({
+      error: 'UNAUTHORIZED',
+      message: 'SOURCE_FETCH_SECRET must be configured in production environment.',
+    });
+    return;
+  }
 
   const authHeader = req.headers.authorization;
   const customHeader = req.headers['x-source-fetch-secret'];

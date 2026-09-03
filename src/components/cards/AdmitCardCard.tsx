@@ -17,7 +17,6 @@ export const AdmitCardCard: React.FC<AdmitCardCardProps> = ({ item }) => {
             {item.sector === 'central' ? 'Central' : item.stateName || 'State'}
           </Badge>
           <div className="flex items-center gap-1.5">
-            <Badge variant="demo" size="sm">DEMO</Badge>
             <Badge variant={item.status === 'Available' ? 'success' : 'warning'} size="sm">
               {item.status}
             </Badge>
@@ -57,7 +56,7 @@ export const AdmitCardCard: React.FC<AdmitCardCardProps> = ({ item }) => {
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600/80 hover:bg-blue-600 text-white text-xs font-semibold transition-colors"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>Download (Demo Link)</span>
+          <span>Download Hall Ticket</span>
           <ExternalLink className="w-3 h-3 opacity-60" />
         </a>
       </div>

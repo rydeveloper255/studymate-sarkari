@@ -44,6 +44,10 @@ import {
 export class TelegramNotificationService {
   private config: TelegramConfig;
   private client: TelegramClient;
+  private static connectionCache: {
+    data: { telegram: 'connected' | 'not_configured' | 'error'; bot?: string; botId?: string };
+    expiresAt: number;
+  } | null = null;
 
   constructor(customConfig?: Partial<TelegramConfig>) {
     this.config = {
@@ -51,6 +55,61 @@ export class TelegramNotificationService {
       ...customConfig,
     };
     this.client = new TelegramClient(this.config.botToken);
+  }
+
+  /**
+   * Safe backend-only Telegram connection health check.
+   * Performs real getMe query against Telegram Bot API when TELEGRAM_BOT_TOKEN is set.
+   * Cached for 30s to prevent spamming/rate-limiting the Telegram API on health probes.
+   * NEVER exposes bot token, service role key, or sensitive error traces.
+   */
+  public async checkConnection(): Promise<{
+    telegram: 'connected' | 'not_configured' | 'error';
+    bot?: string;
+    botId?: string;
+  }> {
+    const config = this.config;
+    if (!config.botToken) {
+      return { telegram: 'not_configured' };
+    }
+
+    // Check memory cache
+    if (
+      TelegramNotificationService.connectionCache &&
+      TelegramNotificationService.connectionCache.expiresAt > Date.now()
+    ) {
+      return TelegramNotificationService.connectionCache.data;
+    }
+
+    try {
+      const me = await this.client.getMe();
+      if (me.ok && me.botInfo) {
+        const result = {
+          telegram: 'connected' as const,
+          bot: me.botInfo.username || config.botUsername || 'StudyMateOfficialBot',
+          botId: String(me.botInfo.id),
+        };
+        TelegramNotificationService.connectionCache = {
+          data: result,
+          expiresAt: Date.now() + 30000, // 30s cache
+        };
+        return result;
+      }
+
+      const errResult = { telegram: 'error' as const };
+      TelegramNotificationService.connectionCache = {
+        data: errResult,
+        expiresAt: Date.now() + 15000, // 15s cache on error
+      };
+      return errResult;
+    } catch {
+      const errResult = { telegram: 'error' as const };
+      TelegramNotificationService.connectionCache = {
+        data: errResult,
+        expiresAt: Date.now() + 15000,
+      };
+      return errResult;
+    }
   }
 
   /**

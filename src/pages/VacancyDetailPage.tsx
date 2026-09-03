@@ -127,14 +127,10 @@ export const VacancyDetailPage: React.FC = () => {
               </Badge>
             )}
 
-            {isSupabaseConfigured && !job.isDemo ? (
+            {isSupabaseConfigured && (
               <Badge variant="success" size="md">
                 <Database className="w-3 h-3" />
                 Live Database
-              </Badge>
-            ) : (
-              <Badge variant="demo" size="md">
-                Data Layer
               </Badge>
             )}
           </div>

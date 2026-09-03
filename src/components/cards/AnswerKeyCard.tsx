@@ -16,7 +16,6 @@ export const AnswerKeyCard: React.FC<AnswerKeyCardProps> = ({ item }) => {
             {item.sector === 'central' ? 'Central' : item.stateName || 'State'}
           </Badge>
           <div className="flex items-center gap-1.5">
-            <Badge variant="demo" size="sm">DEMO</Badge>
             <Badge variant={item.status === 'Final' ? 'success' : 'warning'} size="sm">
               {item.status} Key
             </Badge>
@@ -58,7 +57,7 @@ export const AnswerKeyCard: React.FC<AnswerKeyCardProps> = ({ item }) => {
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold transition-colors"
         >
           <Key className="w-3.5 h-3.5" />
-          <span>View Key (Demo Link)</span>
+          <span>View Answer Key</span>
           <ExternalLink className="w-3 h-3 opacity-60" />
         </a>
       </div>

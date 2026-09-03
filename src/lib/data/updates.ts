@@ -1,7 +1,6 @@
 import { getSupabase } from '../supabase';
 import { GovernmentUpdate, UpdateCategory } from '../../types';
 import { DbGovernmentUpdate, PaginatedResult } from '../../types/database';
-import { DEMO_UPDATES } from '../../data/demoUpdates';
 import { mapDbUpdateToUpdate } from './mappers';
 
 export interface UpdateFetchOptions {
@@ -45,14 +44,14 @@ export async function fetchUpdates(
 
       const { data, error, count } = await query;
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         const total = count ?? data.length;
         return {
           data: data.map((row: DbGovernmentUpdate) => mapDbUpdateToUpdate(row)),
           total,
           page,
           pageSize,
-          totalPages: Math.ceil(total / pageSize),
+          totalPages: Math.ceil(total / pageSize) || 0,
           isSupabaseSource: true,
         };
       }
@@ -61,39 +60,52 @@ export async function fetchUpdates(
     }
   }
 
-  // Fallback
-  let results = [...DEMO_UPDATES];
+  // Node test environment fallback
+  if (typeof window === 'undefined') {
+    try {
+      const { getAllActiveUpdates } = await import('../server/supabaseAdmin');
+      const activeUpdates = await getAllActiveUpdates();
+      if (activeUpdates && activeUpdates.length > 0) {
+        let results = activeUpdates.map((u) => mapDbUpdateToUpdate(u));
 
-  if (options.category && options.category !== 'all') {
-    results = results.filter((u) => u.category === options.category);
+        if (options.category && options.category !== 'all') {
+          results = results.filter((u) => u.category === options.category);
+        }
+        if (options.isHighPriorityOnly) {
+          results = results.filter((u) => u.isHighPriority);
+        }
+        if (options.searchQuery && options.searchQuery.trim()) {
+          const q = options.searchQuery.toLowerCase().trim();
+          results = results.filter(
+            (u) =>
+              u.title.toLowerCase().includes(q) ||
+              u.organization.toLowerCase().includes(q) ||
+              u.summary.toLowerCase().includes(q)
+          );
+        }
+
+        const total = results.length;
+        const from = (page - 1) * pageSize;
+        return {
+          data: results.slice(from, from + pageSize),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 1,
+          isSupabaseSource: false,
+        };
+      }
+    } catch {
+      // ignore
+    }
   }
-
-  if (options.isHighPriorityOnly) {
-    results = results.filter((u) => u.isHighPriority);
-  }
-
-  if (options.searchQuery && options.searchQuery.trim()) {
-    const q = options.searchQuery.toLowerCase().trim();
-    results = results.filter(
-      (u) =>
-        u.title.toLowerCase().includes(q) ||
-        u.organization.toLowerCase().includes(q) ||
-        u.summary.toLowerCase().includes(q)
-    );
-  }
-
-  results.sort((a, b) => b.date.localeCompare(a.date));
-
-  const total = results.length;
-  const from = (page - 1) * pageSize;
-  const paginatedData = results.slice(from, from + pageSize);
 
   return {
-    data: paginatedData,
-    total,
+    data: [],
+    total: 0,
     page,
     pageSize,
-    totalPages: Math.ceil(total / pageSize) || 1,
+    totalPages: 0,
     isSupabaseSource: false,
   };
 }
@@ -122,7 +134,20 @@ export async function fetchUpdateById(id: string): Promise<GovernmentUpdate | nu
     }
   }
 
-  const found = DEMO_UPDATES.find((u) => u.id === id);
-  return found || null;
+  // Node test environment fallback
+  if (typeof window === 'undefined') {
+    try {
+      const { getAllActiveUpdates } = await import('../server/supabaseAdmin');
+      const updates = await getAllActiveUpdates();
+      const found = updates.find((u) => u.id === id);
+      if (found) {
+        return mapDbUpdateToUpdate(found);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
 }
 

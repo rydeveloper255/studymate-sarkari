@@ -166,7 +166,6 @@ export const StateDetailPage: React.FC = () => {
                 <Badge variant={stateInfo.type === 'state' ? 'purple' : 'info'}>
                   {stateInfo.type === 'state' ? 'State Government' : 'Union Territory'}
                 </Badge>
-                <Badge variant="demo">Data Layer</Badge>
               </div>
               <p className="text-xs sm:text-sm text-slate-300 mt-1 flex items-center gap-3 flex-wrap">
                 <span><strong>Capital:</strong> {stateInfo.capital}</span>

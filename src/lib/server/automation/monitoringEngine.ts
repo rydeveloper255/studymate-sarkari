@@ -96,12 +96,12 @@ export async function getSystemHealthReport(): Promise<SystemHealthReport> {
 
   // Telegram status
   const tgTokenConfigured = Boolean(process.env.TELEGRAM_BOT_TOKEN);
-  const tgEnabled = process.env.TELEGRAM_NOTIFICATIONS_ENABLED === 'true';
+  const tgEnabled = process.env.TELEGRAM_NOTIFICATIONS_ENABLED === 'true' || tgTokenConfigured;
   const tgDryRun = process.env.TELEGRAM_DRY_RUN !== 'false';
 
   let tgStatus: 'configured' | 'dry_run' | 'disabled' = 'disabled';
-  if (tgEnabled) {
-    tgStatus = tgDryRun ? 'dry_run' : (tgTokenConfigured ? 'configured' : 'disabled');
+  if (tgTokenConfigured) {
+    tgStatus = tgDryRun ? 'dry_run' : 'configured';
   }
 
   const lastRun = recentRuns[0];

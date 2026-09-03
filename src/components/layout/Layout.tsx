@@ -3,7 +3,6 @@ import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { MobileBottomNav } from './MobileBottomNav';
-import { DemoNoticeBanner } from '../ui/DemoNoticeBanner';
 import { LiveTicker } from '../ui/LiveTicker';
 
 interface LayoutProps {
@@ -20,9 +19,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-[#080c15] text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
-      {/* Top Demo Notice & Info */}
-      <DemoNoticeBanner />
-
       {/* Live Alerts Ticker */}
       <LiveTicker />
 

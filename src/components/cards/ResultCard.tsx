@@ -16,7 +16,6 @@ export const ResultCard: React.FC<ResultCardProps> = ({ item }) => {
             {item.sector === 'central' ? 'Central' : item.stateName || 'State'}
           </Badge>
           <div className="flex items-center gap-1.5">
-            <Badge variant="demo" size="sm">DEMO</Badge>
             <Badge variant="success" size="sm">
               <CheckCircle2 className="w-3 h-3" />
               {item.status}
@@ -59,7 +58,7 @@ export const ResultCard: React.FC<ResultCardProps> = ({ item }) => {
           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-600 text-white text-xs font-semibold transition-colors"
         >
           <Award className="w-3.5 h-3.5" />
-          <span>View Result (Demo Link)</span>
+          <span>View Result</span>
           <ExternalLink className="w-3 h-3 opacity-60" />
         </a>
       </div>

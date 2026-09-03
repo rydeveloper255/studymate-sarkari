@@ -81,10 +81,8 @@ export const UpdatesPage: React.FC = () => {
             Important Recruitment Updates
           </h1>
           <Badge variant="warning">Live Feed</Badge>
-          {isSupabaseConfigured ? (
+          {isSupabaseConfigured && (
             <Badge variant="success">Supabase Live</Badge>
-          ) : (
-            <Badge variant="demo">Data Layer</Badge>
           )}
         </div>
         <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">

@@ -56,7 +56,7 @@ export const StateCard: React.FC<StateCardProps> = ({ state }) => {
         <span className="text-slate-400 flex items-center gap-1">
           <Briefcase className="w-3.5 h-3.5 text-blue-400" />
           <span className="text-slate-300 font-medium">
-            {state.totalActiveVacanciesCount} Vacancies (Demo)
+            {state.totalActiveVacanciesCount} Vacancies
           </span>
         </span>
         <span className="text-blue-400 group-hover:translate-x-0.5 transition-transform flex items-center">

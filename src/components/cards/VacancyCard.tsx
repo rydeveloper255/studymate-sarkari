@@ -46,10 +46,6 @@ export const VacancyCard: React.FC<VacancyCardProps> = ({ job, featured = false 
                 {job.centralCategory}
               </Badge>
             )}
-
-            <Badge variant="demo" size="sm">
-              DEMO DATA
-            </Badge>
           </div>
 
           <Badge

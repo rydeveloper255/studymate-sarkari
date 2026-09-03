@@ -1,10 +1,24 @@
-import React from 'react';
-import { Bell, Flame, ChevronRight } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { DEMO_UPDATES } from '../../data/demoUpdates';
+import { fetchUpdates } from '../../lib/data/updates';
+import { GovernmentUpdate } from '../../types';
 
 export const LiveTicker: React.FC = () => {
-  const topUpdates = DEMO_UPDATES.slice(0, 3);
+  const [updates, setUpdates] = useState<GovernmentUpdate[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchUpdates({ pageSize: 5 }).then((res) => {
+      if (mounted && res.data) {
+        setUpdates(res.data);
+      }
+    }).catch(() => {});
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <div className="bg-slate-900/90 border-b border-slate-800/80 px-4 py-1.5 text-xs">
@@ -18,17 +32,23 @@ export const LiveTicker: React.FC = () => {
         </div>
 
         <div className="flex-1 flex items-center gap-4 overflow-x-auto no-scrollbar py-0.5 whitespace-nowrap">
-          {topUpdates.map((item, index) => (
-            <Link
-              key={item.id}
-              to={item.linkUrl || '/updates'}
-              className="inline-flex items-center gap-1.5 text-slate-300 hover:text-cyan-300 transition-colors flex-shrink-0"
-            >
-              {index > 0 && <span className="text-slate-600 font-bold">•</span>}
-              <span className="text-amber-400 font-medium">[{item.organization}]</span>
-              <span className="truncate max-w-[280px] sm:max-w-[420px]">{item.title}</span>
-            </Link>
-          ))}
+          {updates.length > 0 ? (
+            updates.map((item, index) => (
+              <Link
+                key={item.id}
+                to={item.linkUrl || '/updates'}
+                className="inline-flex items-center gap-1.5 text-slate-300 hover:text-cyan-300 transition-colors flex-shrink-0"
+              >
+                {index > 0 && <span className="text-slate-600 font-bold">•</span>}
+                <span className="text-amber-400 font-medium">[{item.organization}]</span>
+                <span className="truncate max-w-[280px] sm:max-w-[420px]">{item.title}</span>
+              </Link>
+            ))
+          ) : (
+            <span className="text-slate-400 italic">
+              Official recruitment alerts, admit card releases, and exam updates will appear here in real time.
+            </span>
+          )}
         </div>
 
         <Link

@@ -27,7 +27,7 @@ if (supabaseUrl && supabaseAnonKey && !supabaseUrl.includes('your-project')) {
 
 /**
  * Returns the Supabase client instance if configured.
- * For Step 1, the app uses verified local demo datasets until database synchronization is enabled in later steps.
+ * Queries live government job records, updates, results, and notifications.
  */
 export function getSupabase(): SupabaseClient | null {
   return supabaseInstance;

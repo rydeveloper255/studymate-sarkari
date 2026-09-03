@@ -55,7 +55,6 @@ export const UpdateCard: React.FC<UpdateCardProps> = ({ update }) => {
           <div className="flex items-center gap-1.5 text-xs text-slate-400">
             <Calendar className="w-3.5 h-3.5" />
             <span>{update.date}</span>
-            <Badge variant="demo" size="sm">DEMO</Badge>
           </div>
         </div>
 

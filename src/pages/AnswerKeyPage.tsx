@@ -72,10 +72,8 @@ export const AnswerKeyPage: React.FC = () => {
             Answer Keys & Question Papers
           </h1>
           <Badge variant="warning">Provisional & Final</Badge>
-          {isSupabaseConfigured ? (
+          {isSupabaseConfigured && (
             <Badge variant="success">Supabase Live</Badge>
-          ) : (
-            <Badge variant="demo">Data Layer</Badge>
           )}
         </div>
         <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">

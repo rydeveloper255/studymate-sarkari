@@ -53,7 +53,7 @@ export function isPublishableJob(
   }
 
   // 3. Item type check
-  if (payload.itemType !== 'vacancy') {
+  if (payload.itemType !== 'vacancy' && (payload.itemType as string) !== 'job_vacancy') {
     return {
       eligible: false,
       reason: `Expected itemType 'vacancy', received '${payload.itemType}'.`,
@@ -132,7 +132,7 @@ export function isPublishableUpdate(
   }
 
   // 3. Valid update types
-  const validTypes = ['admit_card', 'result', 'answer_key', 'exam_update', 'vacancy', 'other'];
+  const validTypes = ['admit_card', 'result', 'answer_key', 'exam_update', 'vacancy', 'job_vacancy', 'other'];
   if (!validTypes.includes(payload.itemType)) {
     return {
       eligible: false,

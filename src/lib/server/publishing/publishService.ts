@@ -54,7 +54,7 @@ export async function publishParsedItem(
   const parsedItemId = 'id' in item && typeof item.id === 'string' ? item.id : undefined;
 
   // 1. Eligibility Check
-  if (payload.itemType === 'vacancy') {
+  if (payload.itemType === 'vacancy' || (payload.itemType as string) === 'job_vacancy') {
     const check = isPublishableJob(item);
     if (!check.eligible && !options.force) {
       await savePublishLog({

@@ -72,10 +72,8 @@ export const ResultsPage: React.FC = () => {
             Declared Results & Cutoffs
           </h1>
           <Badge variant="success">Merit Lists</Badge>
-          {isSupabaseConfigured ? (
+          {isSupabaseConfigured && (
             <Badge variant="success">Supabase Live</Badge>
-          ) : (
-            <Badge variant="demo">Data Layer</Badge>
           )}
         </div>
         <p className="text-sm text-slate-400 max-w-2xl leading-relaxed">

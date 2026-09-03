@@ -88,9 +88,9 @@ async function runStep6Tests() {
     ageLimit: { minAge: 21, maxAge: 32 },
     applicationFee: { general: '100', scStPh: '0', paymentMode: 'Online' },
     importantDates: {
-      notificationDate: '2026-02-14',
-      applyStartDate: '2026-02-14',
-      applyEndDate: '2026-03-05',
+      notificationDate: new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0],
+      applyStartDate: new Date(Date.now() - 5 * 86400000).toISOString().split('T')[0],
+      applyEndDate: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
     },
     selectionProcess: ['Prelims', 'Mains', 'Interview'],
     summary: 'UPSC CSE 2026 recruitment for 1056 vacancies.',
@@ -151,7 +151,7 @@ async function runStep6Tests() {
     totalVacancies: 1120, // Updated vacancy count
     importantDates: {
       ...validJobPayload.importantDates,
-      applyEndDate: '2026-03-15', // Extended last date
+      applyEndDate: new Date(Date.now() + 45 * 86400000).toISOString().split('T')[0], // Extended last date
     },
   };
   const pubRes3 = await publishParsedItem(updatedJobPayload);

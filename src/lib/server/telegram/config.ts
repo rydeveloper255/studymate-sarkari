@@ -10,10 +10,13 @@
 
 import { TelegramConfig } from '../../../types/telegram';
 
+export const OFFICIAL_BOT_USERNAME = 'StudyMateOfficialBot';
+export const OFFICIAL_BOT_ID = '5165363865';
+
 export function getTelegramConfig(): TelegramConfig {
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim() || undefined;
-  const botUsername = process.env.TELEGRAM_BOT_USERNAME?.trim() || undefined;
-  const botId = process.env.TELEGRAM_BOT_ID?.trim() || undefined;
+  const botUsername = process.env.TELEGRAM_BOT_USERNAME?.trim() || OFFICIAL_BOT_USERNAME;
+  const botId = process.env.TELEGRAM_BOT_ID?.trim() || OFFICIAL_BOT_ID;
   const defaultChatId = process.env.TELEGRAM_DEFAULT_CHAT_ID?.trim() || undefined;
 
   const notificationsEnabled =
