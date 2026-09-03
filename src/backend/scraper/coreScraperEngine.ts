@@ -16,6 +16,7 @@ import {
   JobSourceRecord,
   ScraperEngineConfig,
   ScraperRunSummary,
+  ValidatedScrapedItem,
   ValidatedScrapedVacancy,
   RawScrapedNotice,
   FetchResult,
@@ -28,6 +29,7 @@ import { JsonFetchAdapter } from './adapters/jsonAdapter';
 import {
   loadJobSourcesFromSupabase,
   updateJobSourceState,
+  persistValidatedItems,
   persistValidatedVacancies,
   recordSourceFetchLog,
 } from './supabaseClient';
@@ -64,12 +66,14 @@ export class CoreScraperEngine {
     priority?: string;
     limit?: number;
     forceAll?: boolean;
+    dryRun?: boolean;
   } = {}): Promise<ScraperRunSummary> {
     const runId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const startedAt = new Date().toISOString();
     const startMs = Date.now();
+    const isDryRun = options.dryRun ?? this.config.dryRun;
 
-    console.log(`[CoreScraperEngine] Starting scraping run ${runId} (Date Cutoff: ${this.config.dateCutoff})...`);
+    console.log(`[CoreScraperEngine] Starting scraping run ${runId} (Date Cutoff: ${this.config.dateCutoff}, DryRun: ${isDryRun})...`);
 
     // 1. Connect to Supabase and read active sources
     const sources = await loadJobSourcesFromSupabase({
@@ -98,7 +102,7 @@ export class CoreScraperEngine {
 
     // 2. Process sources in concurrent batches
     const chunks = this.chunkArray(sources, this.config.concurrency);
-    const validatedVacanciesToSave: ValidatedScrapedVacancy[] = [];
+    const validatedItemsToSave: ValidatedScrapedItem[] = [];
 
     for (const chunk of chunks) {
       const results = await Promise.allSettled(
@@ -119,7 +123,7 @@ export class CoreScraperEngine {
             summary.itemsDiscovered += outcome.discoveredItems;
             summary.itemsAcceptedCutoff += outcome.acceptedItems.length;
             summary.itemsRejectedCutoff += outcome.rejectedDueToCutoff;
-            validatedVacanciesToSave.push(...outcome.acceptedItems);
+            validatedItemsToSave.push(...outcome.acceptedItems);
           } else {
             summary.sourcesFailed++;
             summary.errors.push({
@@ -139,13 +143,19 @@ export class CoreScraperEngine {
       }
     }
 
-    // 3. Persist cutoff-accepted vacancies to Supabase
-    if (!this.config.dryRun && validatedVacanciesToSave.length > 0) {
-      console.log(`[CoreScraperEngine] Persisting ${validatedVacanciesToSave.length} cutoff-validated vacancies to Supabase...`);
-      const saveRes = await persistValidatedVacancies(validatedVacanciesToSave);
-      summary.itemsSaved = saveRes.inserted + saveRes.updated;
+    // 3. Persist cutoff-accepted items to Supabase
+    if (!isDryRun && validatedItemsToSave.length > 0) {
+      console.log(`[CoreScraperEngine] Persisting ${validatedItemsToSave.length} cutoff-validated items to Supabase...`);
+      const saveRes = await persistValidatedItems(validatedItemsToSave);
+      summary.itemsSaved = saveRes.inserted;
+      summary.vacanciesSaved = saveRes.vacanciesSaved;
+      summary.admitCardsSaved = saveRes.admitCardsSaved;
+      summary.resultsSaved = saveRes.resultsSaved;
+      summary.answerKeysSaved = saveRes.answerKeysSaved;
+      summary.updatesSaved = saveRes.updatesSaved;
+      summary.duplicatesSkipped = saveRes.skipped;
     } else {
-      summary.itemsSaved = validatedVacanciesToSave.length;
+      summary.itemsSaved = validatedItemsToSave.length;
     }
 
     summary.completedAt = new Date().toISOString();
@@ -174,7 +184,7 @@ export class CoreScraperEngine {
     success: boolean;
     unchanged: boolean;
     discoveredItems: number;
-    acceptedItems: ValidatedScrapedVacancy[];
+    acceptedItems: ValidatedScrapedItem[];
     rejectedDueToCutoff: number;
     error?: string;
   }> {
@@ -233,7 +243,7 @@ export class CoreScraperEngine {
     const rawNotices = this.extractNoticesFromAdapter(adapter, fetchResult, source);
 
     // 6. ENFORCE AUGUST 1, 2026 CUTOFF
-    const acceptedVacancies: ValidatedScrapedVacancy[] = [];
+    const acceptedItems: ValidatedScrapedItem[] = [];
     let rejectedCount = 0;
 
     for (const raw of rawNotices) {
@@ -245,16 +255,16 @@ export class CoreScraperEngine {
         continue;
       }
 
-      // 7. Normalize into validated vacancy
-      const validated = this.normalizeRawNoticeToVacancy(raw, source, cutoffCheck.normalizedDate, fetchResult.contentHash);
-      acceptedVacancies.push(validated);
+      // 7. Normalize into validated item
+      const validated = this.normalizeRawNoticeToItem(raw, source, cutoffCheck.normalizedDate, fetchResult.contentHash);
+      acceptedItems.push(validated);
     }
 
     return {
       success: true,
       unchanged: false,
       discoveredItems: rawNotices.length,
-      acceptedItems: acceptedVacancies,
+      acceptedItems,
       rejectedDueToCutoff: rejectedCount,
     };
   }
@@ -285,14 +295,14 @@ export class CoreScraperEngine {
   }
 
   /**
-   * Converts raw notice candidate into a strictly validated vacancy.
+   * Converts raw notice candidate into a strictly validated item.
    */
-  private normalizeRawNoticeToVacancy(
+  private normalizeRawNoticeToItem(
     raw: RawScrapedNotice,
     source: JobSourceRecord,
     verifiedDate: string,
     contentHash: string
-  ): ValidatedScrapedVacancy {
+  ): ValidatedScrapedItem {
     const postName = raw.postName || raw.title;
     const org = raw.organization || source.organization || source.name;
     const slug = this.generateSlug(org, postName, raw.notificationNumber, verifiedDate);
@@ -307,15 +317,26 @@ export class CoreScraperEngine {
     const startDate = raw.applyStartDate || verifiedDate;
     const endDate = raw.applyEndDate;
 
-    let status: 'active' | 'upcoming' | 'closed' | 'archived' = 'active';
+    let status: any = 'active';
     let isLive = true;
 
-    if (startDate > now) {
-      status = 'upcoming';
-      isLive = false;
-    } else if (endDate && endDate < now) {
-      status = 'closed';
-      isLive = false;
+    if (raw.detectedType === 'admit_card') {
+      status = 'Available';
+      isLive = true;
+    } else if (raw.detectedType === 'result') {
+      status = 'Declared';
+      isLive = true;
+    } else if (raw.detectedType === 'answer_key') {
+      status = 'Final';
+      isLive = true;
+    } else {
+      if (startDate > now) {
+        status = 'upcoming';
+        isLive = false;
+      } else if (endDate && endDate < now) {
+        status = 'closed';
+        isLive = false;
+      }
     }
 
     const categories: string[] = Array.isArray(source.category)
@@ -323,6 +344,7 @@ export class CoreScraperEngine {
       : [source.category || 'vacancy'];
 
     return {
+      itemType: raw.detectedType || 'vacancy',
       sourceId: source.id,
       sourceName: source.name,
       title: raw.title,
@@ -348,7 +370,43 @@ export class CoreScraperEngine {
       isLive,
       status,
       scrapedAt: new Date().toISOString(),
+
+      // Admit Card fields
+      examName: postName,
+      releaseDate: raw.releaseDate || verifiedDate,
+      downloadUrl: raw.officialNotificationUrl || source.official_url,
+
+      // Result fields
+      resultDate: raw.resultDate || verifiedDate,
+      viewUrl: raw.officialNotificationUrl || source.official_url,
+      cutOffAvailable: true,
+
+      // Answer Key fields
+      objectionLastDate: raw.objectionLastDate || null,
+
+      // Update fields
+      updateType:
+        raw.detectedType === 'admit_card'
+          ? 'admit_card'
+          : raw.detectedType === 'result'
+          ? 'result'
+          : raw.detectedType === 'answer_key'
+          ? 'answer_key'
+          : 'recruitment',
+      summary: raw.summary,
     };
+  }
+
+  /**
+   * Backwards-compatible alias for normalizeRawNoticeToItem
+   */
+  private normalizeRawNoticeToVacancy(
+    raw: RawScrapedNotice,
+    source: JobSourceRecord,
+    verifiedDate: string,
+    contentHash: string
+  ): ValidatedScrapedVacancy {
+    return this.normalizeRawNoticeToItem(raw, source, verifiedDate, contentHash);
   }
 
   private generateSlug(org: string, post: string, notifNo?: string | null, date?: string): string {

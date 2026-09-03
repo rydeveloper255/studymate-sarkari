@@ -14,6 +14,7 @@ import { reconcileExpiredVacancies } from './reconciliationService';
 import { acquireDistributedLock, releaseDistributedLock } from './distributedLock';
 import { loadAllActiveSourcesFromDatabase, getDueSourcesFromRegistry } from '../sources/sourceLoader';
 import { getTelegramService } from '../telegram/service';
+import { CoreScraperEngine, loadJobSourcesFromSupabase } from '../../../backend/scraper';
 
 let hourlyInterval: NodeJS.Timeout | null = null;
 let tickerInterval: NodeJS.Timeout | null = null;
@@ -21,7 +22,14 @@ let reconciliationInterval: NodeJS.Timeout | null = null;
 let isSchedulerRunning = false;
 let isSweepInProgress = false;
 
+// Singleton CoreScraperEngine instance
+const scraperEngine = new CoreScraperEngine({
+  concurrency: 4,
+  dateCutoff: '2026-08-01',
+});
+
 // Safe Operational Metrics (Leak-Proof)
+let lastRun: string | null = null;
 let lastSuccessfulRun: string | null = null;
 let lastRunDurationMs = 0;
 let activeSourcesCount = 0;
@@ -30,6 +38,14 @@ let successfulSources = 0;
 let failedSources = 0;
 let recordsDiscovered = 0;
 let recordsInserted = 0;
+let duplicatesSkipped = 0;
+let itemsAcceptedCutoff = 0;
+let itemsRejectedCutoff = 0;
+let totalVacanciesSaved = 0;
+let totalAdmitCardsSaved = 0;
+let totalResultsSaved = 0;
+let totalAnswerKeysSaved = 0;
+let totalUpdatesSaved = 0;
 let lastTelegramStatus = 'idle';
 const schedulerStartTime = Date.now();
 let lastReconciliationTime: string | null = null;
@@ -37,6 +53,7 @@ let lastReconciliationTime: string | null = null;
 export interface ScraperHealthStatus {
   status: 'ok' | 'degraded' | 'stopped';
   scraper_status: 'running' | 'idle' | 'stopped';
+  last_run: string | null;
   last_successful_run: string | null;
   last_run_duration_ms: number;
   active_sources_count: number;
@@ -45,10 +62,28 @@ export interface ScraperHealthStatus {
   failed_sources: number;
   records_discovered: number;
   records_inserted: number;
+  duplicates_skipped: number;
+  items_accepted_cutoff: number;
+  items_rejected_cutoff: number;
   last_telegram_status: string;
   scheduler_uptime_seconds: number;
   check_interval: string;
   last_reconciliation_time: string | null;
+  engine_metrics?: {
+    total_runs: number;
+    vacancies_saved: number;
+    admit_cards_saved: number;
+    results_saved: number;
+    answer_keys_saved: number;
+    updates_saved: number;
+  };
+}
+
+/**
+ * Returns the singleton CoreScraperEngine instance.
+ */
+export function getCoreScraperEngine(): CoreScraperEngine {
+  return scraperEngine;
 }
 
 /**
@@ -60,8 +95,9 @@ export function getScraperHealthStatus(): ScraperHealthStatus {
   const currentStatus = !isRunning ? 'stopped' : isSweepInProgress ? 'running' : 'idle';
 
   return {
-    status: isRunning ? (failedSources > 5 ? 'degraded' : 'ok') : 'stopped',
+    status: isRunning ? (failedSources > 10 ? 'degraded' : 'ok') : 'stopped',
     scraper_status: currentStatus,
+    last_run: lastRun,
     last_successful_run: lastSuccessfulRun,
     last_run_duration_ms: lastRunDurationMs,
     active_sources_count: activeSourcesCount,
@@ -70,17 +106,32 @@ export function getScraperHealthStatus(): ScraperHealthStatus {
     failed_sources: failedSources,
     records_discovered: recordsDiscovered,
     records_inserted: recordsInserted,
+    duplicates_skipped: duplicatesSkipped,
+    items_accepted_cutoff: itemsAcceptedCutoff,
+    items_rejected_cutoff: itemsRejectedCutoff,
     last_telegram_status: lastTelegramStatus,
     scheduler_uptime_seconds: Math.floor((Date.now() - schedulerStartTime) / 1000),
     check_interval: '1 hour',
     last_reconciliation_time: lastReconciliationTime,
+    engine_metrics: {
+      total_runs: scraperEngine.getTotalRuns(),
+      vacancies_saved: totalVacanciesSaved,
+      admit_cards_saved: totalAdmitCardsSaved,
+      results_saved: totalResultsSaved,
+      answer_keys_saved: totalAnswerKeysSaved,
+      updates_saved: totalUpdatesSaved,
+    },
   };
 }
 
 /**
- * Executes a full hourly comprehensive sweep of all active government sources.
+ * Executes a full hourly comprehensive sweep of all active government sources using CoreScraperEngine.
  */
-export async function executeHourlyMonitoringSweep(options: { forceAll?: boolean } = {}): Promise<{
+export async function executeHourlyMonitoringSweep(options: {
+  forceAll?: boolean;
+  limit?: number;
+  dryRun?: boolean;
+} = {}): Promise<{
   success: boolean;
   sourcesEvaluated: number;
   itemsDiscovered: number;
@@ -102,39 +153,51 @@ export async function executeHourlyMonitoringSweep(options: { forceAll?: boolean
   }
 
   isSweepInProgress = true;
+  lastRun = new Date().toISOString();
 
   try {
-    const allActive = await loadAllActiveSourcesFromDatabase({ forceRefresh: true });
-    activeSourcesCount = allActive.length;
+    const sources = await loadJobSourcesFromSupabase();
+    activeSourcesCount = sources.length;
+    const effectiveLimit = options.limit ? Math.min(options.limit, sources.length) : sources.length;
 
-    console.log(`[Production Scheduler] Executing hourly sweep for ${allActive.length} active government sources...`);
+    console.log(`[Production Scheduler] Executing hourly sweep via CoreScraperEngine for ${effectiveLimit}/${sources.length} active government sources...`);
 
-    const summary = await PipelineOrchestrator.runFullPipeline({
-      forceAll: options.forceAll ?? true,
-      concurrency: 4,
+    // Run CoreScraperEngine across active government sources
+    const engineSummary = await scraperEngine.run({
+      forceAll: options.forceAll ?? false,
+      limit: effectiveLimit,
+      dryRun: options.dryRun,
     });
 
-    sourcesChecked = summary.sourcesEvaluated;
-    successfulSources = summary.sourcesFetched;
-    failedSources = Math.max(0, summary.sourcesEvaluated - summary.sourcesFetched);
-    recordsDiscovered = summary.itemsParsed;
-    recordsInserted = summary.itemsPublished;
-    lastRunDurationMs = summary.durationMs;
+    sourcesChecked += engineSummary.sourcesEvaluated;
+    successfulSources += engineSummary.sourcesFetched;
+    failedSources += engineSummary.sourcesFailed;
+    recordsDiscovered += engineSummary.itemsDiscovered;
+    recordsInserted += engineSummary.itemsSaved;
+    duplicatesSkipped += (engineSummary.duplicatesSkipped || 0) + engineSummary.sourcesUnchanged;
+    itemsAcceptedCutoff += engineSummary.itemsAcceptedCutoff;
+    itemsRejectedCutoff += engineSummary.itemsRejectedCutoff;
 
-    if (summary.status === 'COMPLETED' || summary.status === 'PARTIAL') {
+    if (engineSummary.vacanciesSaved) totalVacanciesSaved += engineSummary.vacanciesSaved;
+    if (engineSummary.admitCardsSaved) totalAdmitCardsSaved += engineSummary.admitCardsSaved;
+    if (engineSummary.resultsSaved) totalResultsSaved += engineSummary.resultsSaved;
+    if (engineSummary.answerKeysSaved) totalAnswerKeysSaved += engineSummary.answerKeysSaved;
+    if (engineSummary.updatesSaved) totalUpdatesSaved += engineSummary.updatesSaved;
+
+    lastRunDurationMs = engineSummary.durationMs;
+
+    if (engineSummary.sourcesFetched > 0) {
       lastSuccessfulRun = new Date().toISOString();
     }
 
-    // Determine safe Telegram status summary
-    if (summary.telegramSent > 0) {
-      lastTelegramStatus = `sent (${summary.telegramSent} notifications)`;
-    } else if (summary.telegramSkipped > 0) {
-      lastTelegramStatus = `skipped (${summary.telegramSkipped} duplicates/gated)`;
-    } else if (summary.telegramFailed > 0) {
-      lastTelegramStatus = `failed (${summary.telegramFailed} errors)`;
+    // Determine Telegram status safely
+    const tgService = getTelegramService();
+    if (tgService.isEnabled()) {
+      lastTelegramStatus = engineSummary.itemsSaved > 0
+        ? `active (${engineSummary.itemsSaved} new updates notified)`
+        : 'idle_no_new_items';
     } else {
-      const tgService = getTelegramService();
-      lastTelegramStatus = tgService.isEnabled() ? 'idle_no_new_items' : 'dry_run_or_disabled';
+      lastTelegramStatus = 'dry_run_or_unconfigured';
     }
 
     // Reconcile live application statuses (mark expired vacancies as Closed)
@@ -147,9 +210,9 @@ export async function executeHourlyMonitoringSweep(options: { forceAll?: boolean
 
     return {
       success: true,
-      sourcesEvaluated: summary.sourcesEvaluated,
-      itemsDiscovered: summary.itemsParsed,
-      itemsPublished: summary.itemsPublished,
+      sourcesEvaluated: engineSummary.sourcesEvaluated,
+      itemsDiscovered: engineSummary.itemsDiscovered,
+      itemsPublished: engineSummary.itemsSaved,
       durationMs: Date.now() - startMs,
     };
   } catch (err: any) {

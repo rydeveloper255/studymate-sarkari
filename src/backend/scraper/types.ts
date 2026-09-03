@@ -81,6 +81,14 @@ export interface ContentFetchAdapter {
   fetch(source: JobSourceRecord, options?: FetchAdapterOptions): Promise<FetchResult>;
 }
 
+export type ScrapedNoticeType =
+  | 'vacancy'
+  | 'recruitment_notification'
+  | 'admit_card'
+  | 'result'
+  | 'answer_key'
+  | 'exam_update';
+
 /**
  * Candidate item extracted by an adapter or parser
  */
@@ -96,6 +104,9 @@ export interface RawScrapedNotice {
   applyStartDate?: string | null;
   applyEndDate?: string | null;
   examDate?: string | null;
+  releaseDate?: string | null;
+  resultDate?: string | null;
+  objectionLastDate?: string | null;
   totalVacancies?: number | string | null;
   qualification?: string | string[] | null;
   ageLimit?: {
@@ -111,38 +122,65 @@ export interface RawScrapedNotice {
   };
   summary?: string;
   rawHtmlOrText?: string;
-  detectedType?: 'vacancy' | 'admit_card' | 'result' | 'answer_key' | 'exam_update';
+  detectedType?: ScrapedNoticeType;
 }
 
 /**
- * Validated scraped vacancy record ready for Supabase persistence
+ * Validated scraped government item ready for Supabase persistence
+ * (Supports Vacancies, Admit Cards, Results, Answer Keys, and Exam Updates)
  */
-export interface ValidatedScrapedVacancy {
+export interface ValidatedScrapedItem {
   id?: string;
+  itemType: ScrapedNoticeType;
   sourceId: string;
   sourceName: string;
   title: string;
   slug: string;
-  postName: string;
   organization: string;
   sector: 'central' | 'state' | 'banking' | 'defense' | 'railways' | 'teaching';
   stateCode?: string | null;
   category: string[];
-  notificationNumber?: string | null;
   publicationDate: string; // ISO format (YYYY-MM-DD), must be >= 2026-08-01
-  applyStartDate?: string | null;
-  applyEndDate?: string | null;
-  examDate?: string | null;
-  totalVacancies: number | string;
-  qualification: string[];
   officialNotificationUrl: string;
   officialApplyUrl?: string | null;
   officialWebsiteUrl: string;
   contentHash: string;
-  isLive: boolean; // true if applyStartDate <= NOW <= applyEndDate
-  status: 'active' | 'upcoming' | 'closed' | 'archived';
   scrapedAt: string;
+  isLive: boolean;
+  status: 'active' | 'upcoming' | 'closed' | 'archived' | 'Available' | 'Expected Soon' | 'Delayed' | 'Declared' | 'Final' | 'Provisional';
+
+  // Vacancy-specific fields
+  postName?: string;
+  notificationNumber?: string | null;
+  applyStartDate?: string | null;
+  applyEndDate?: string | null;
+  examDate?: string | null;
+  totalVacancies?: number | string;
+  qualification?: string[];
+
+  // Admit Card specific fields
+  examName?: string;
+  releaseDate?: string;
+  downloadUrl?: string;
+  instructions?: string | null;
+
+  // Result specific fields
+  resultDate?: string;
+  viewUrl?: string;
+  cutOffAvailable?: boolean;
+
+  // Answer Key specific fields
+  objectionLastDate?: string | null;
+
+  // Exam Update specific fields
+  updateType?: 'recruitment' | 'exam_notice' | 'admit_card' | 'result' | 'answer_key' | 'cutoff' | 'selection_list' | 'other';
+  summary?: string;
 }
+
+/**
+ * Backwards-compatible alias for ValidatedScrapedItem
+ */
+export type ValidatedScrapedVacancy = ValidatedScrapedItem;
 
 /**
  * Result of checking date cutoff against 1 August 2026
@@ -185,5 +223,11 @@ export interface ScraperRunSummary {
   itemsAcceptedCutoff: number; // >= 2026-08-01
   itemsRejectedCutoff: number; // < 2026-08-01
   itemsSaved: number;
+  vacanciesSaved?: number;
+  admitCardsSaved?: number;
+  resultsSaved?: number;
+  answerKeysSaved?: number;
+  updatesSaved?: number;
+  duplicatesSkipped?: number;
   errors: Array<{ sourceId: string; sourceName: string; error: string }>;
 }

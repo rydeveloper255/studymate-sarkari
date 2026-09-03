@@ -155,11 +155,23 @@ export class HtmlFetchAdapter extends BaseFetchAdapter {
     if (lower.includes('admit card') || lower.includes('hall ticket') || lower.includes('call letter')) {
       return 'admit_card';
     }
-    if (lower.includes('result') || lower.includes('selection list') || lower.includes('merit list')) {
+    if (lower.includes('result') || lower.includes('selection list') || lower.includes('merit list') || lower.includes('cut off') || lower.includes('cutoff')) {
       return 'result';
     }
-    if (lower.includes('answer key') || lower.includes('objection tracker')) {
+    if (lower.includes('answer key') || lower.includes('objection key') || lower.includes('objection tracker')) {
       return 'answer_key';
+    }
+    if (
+      lower.includes('exam notice') ||
+      lower.includes('exam schedule') ||
+      lower.includes('exam date') ||
+      lower.includes('examination schedule') ||
+      lower.includes('time table') ||
+      lower.includes('corrigendum') ||
+      lower.includes('postponement') ||
+      lower.includes('important notice')
+    ) {
+      return 'exam_update';
     }
     return 'vacancy';
   }

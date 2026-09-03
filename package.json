@@ -19,7 +19,8 @@
     "test:automation": "tsx scripts/testAutomationPipeline.ts",
     "test:validate-sources": "tsx scripts/validateSources.ts",
     "test:live-fetch": "tsx scripts/liveTestFetcher.ts",
-    "test:scraper": "tsx scripts/testCoreScraperEngine.ts"
+    "test:scraper": "tsx scripts/testCoreScraperEngine.ts",
+    "test:scheduler": "tsx scripts/testProductionSchedulerIntegration.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

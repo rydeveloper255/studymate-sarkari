@@ -160,6 +160,8 @@ export function extractAndValidateNoticeCutoff(
     { label: 'applyStartDate', value: notice.applyStartDate },
     { label: 'applyEndDate', value: notice.applyEndDate },
     { label: 'examDate', value: notice.examDate },
+    { label: 'releaseDate', value: notice.releaseDate },
+    { label: 'resultDate', value: notice.resultDate },
   ];
 
   for (const candidate of candidates) {
