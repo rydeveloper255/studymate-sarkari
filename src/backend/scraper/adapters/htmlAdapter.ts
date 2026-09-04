@@ -142,37 +142,152 @@ export class HtmlFetchAdapter extends BaseFetchAdapter {
       'post of',
       'examination',
       'admit card',
+      'hall ticket',
+      'call letter',
       'result',
+      'score card',
+      'merit list',
       'answer key',
+      'response sheet',
       'exam notice',
+      'exam schedule',
+      'calendar',
       'online application',
+      'apply online',
+      'corrigendum',
+      'postponement',
+      'rescheduled',
+      'extension',
+      'short notice',
+      'tentative vacancy',
+      'upcoming',
+      'expected recruitment',
     ];
     return keywords.some((kw) => lower.includes(kw));
   }
 
-  private classifyNoticeType(text: string): 'vacancy' | 'admit_card' | 'result' | 'answer_key' | 'exam_update' {
+  public classifyNoticeType(text: string):
+    | 'vacancy'
+    | 'pre_vacancy_notice'
+    | 'recruitment_notification'
+    | 'exam_notification'
+    | 'exam_schedule'
+    | 'admit_card'
+    | 'result'
+    | 'answer_key'
+    | 'important_update' {
     const lower = text.toLowerCase();
-    if (lower.includes('admit card') || lower.includes('hall ticket') || lower.includes('call letter')) {
+
+    // 1. Admit Card
+    if (
+      lower.includes('admit card') ||
+      lower.includes('hall ticket') ||
+      lower.includes('call letter') ||
+      lower.includes('e-admit card') ||
+      lower.includes('download hall ticket') ||
+      lower.includes('entry pass')
+    ) {
       return 'admit_card';
     }
-    if (lower.includes('result') || lower.includes('selection list') || lower.includes('merit list') || lower.includes('cut off') || lower.includes('cutoff')) {
+
+    // 2. Result
+    if (
+      lower.includes('result') ||
+      lower.includes('selection list') ||
+      lower.includes('merit list') ||
+      lower.includes('score card') ||
+      lower.includes('scorecard') ||
+      lower.includes('cut off') ||
+      lower.includes('cutoff') ||
+      lower.includes('marks list')
+    ) {
       return 'result';
     }
-    if (lower.includes('answer key') || lower.includes('objection key') || lower.includes('objection tracker')) {
+
+    // 3. Answer Key
+    if (
+      lower.includes('answer key') ||
+      lower.includes('response sheet') ||
+      lower.includes('objection tracker') ||
+      lower.includes('tentative answer key') ||
+      lower.includes('challenge key') ||
+      lower.includes('master answer key')
+    ) {
       return 'answer_key';
     }
+
+    // 4. Pre-vacancy notice
     if (
-      lower.includes('exam notice') ||
+      lower.includes('expected recruitment') ||
+      lower.includes('upcoming recruitment') ||
+      lower.includes('upcoming vacancy') ||
+      lower.includes('short notice') ||
+      lower.includes('tentative vacancy') ||
+      lower.includes('tentative vacancies') ||
+      lower.includes('recruitment calendar') ||
+      lower.includes('indicative advertisement') ||
+      lower.includes('short notification') ||
+      lower.includes('advance notice')
+    ) {
+      return 'pre_vacancy_notice';
+    }
+
+    // 5. Exam Schedule & Timetable
+    if (
       lower.includes('exam schedule') ||
-      lower.includes('exam date') ||
       lower.includes('examination schedule') ||
+      lower.includes('exam calendar') ||
+      lower.includes('annual calendar') ||
       lower.includes('time table') ||
-      lower.includes('corrigendum') ||
+      lower.includes('examination time table') ||
+      lower.includes('exam dates announced') ||
+      lower.includes('schedule of examination')
+    ) {
+      return 'exam_schedule';
+    }
+
+    // 6. Important Update (Corrigendum / Extension / Postponement)
+    if (
+      lower.includes('correction window') ||
+      lower.includes('date extended') ||
+      lower.includes('last date extended') ||
       lower.includes('postponement') ||
+      lower.includes('postponed') ||
+      lower.includes('rescheduled') ||
+      lower.includes('corrigendum') ||
+      lower.includes('addendum') ||
+      lower.includes('cancellation') ||
       lower.includes('important notice')
     ) {
-      return 'exam_update';
+      return 'important_update';
     }
+
+    // 7. Exam Notification
+    if (
+      lower.includes('exam notification') ||
+      lower.includes('examination notice') ||
+      lower.includes('notification for examination') ||
+      lower.includes('tier-1 notice') ||
+      lower.includes('tier-2 notice') ||
+      lower.includes('preliminary exam notice') ||
+      lower.includes('main examination notice')
+    ) {
+      return 'exam_notification';
+    }
+
+    // 8. Recruitment Notification
+    if (
+      lower.includes('detailed notification') ||
+      lower.includes('employment notice') ||
+      lower.includes('recruitment advertisement') ||
+      lower.includes('advertisement notification') ||
+      lower.includes('advt. no') ||
+      lower.includes('advt no')
+    ) {
+      return 'recruitment_notification';
+    }
+
+    // Default to vacancy
     return 'vacancy';
   }
 

@@ -1,7 +1,7 @@
 import { getSupabase } from '../supabase';
 import { GovernmentUpdate, UpdateCategory } from '../../types';
-import { DbGovernmentUpdate, PaginatedResult } from '../../types/database';
-import { mapDbUpdateToUpdate } from './mappers';
+import { DbGovernmentUpdate, DbGovernmentContent, PaginatedResult } from '../../types/database';
+import { mapDbUpdateToUpdate, mapDbGovernmentContentToUpdate } from './mappers';
 
 export interface UpdateFetchOptions {
   category?: string;
@@ -20,6 +20,45 @@ export async function fetchUpdates(
   const supabase = getSupabase();
 
   if (supabase) {
+    // 1. Check Master Table: government_content
+    try {
+      let query = supabase.from('government_content').select('*', { count: 'exact' });
+
+      if (options.category && options.category !== 'all') {
+        if (options.category === 'admit_card' || options.category === 'result' || options.category === 'answer_key') {
+          query = query.eq('content_type', options.category);
+        }
+      }
+
+      if (options.searchQuery && options.searchQuery.trim()) {
+        const q = `%${options.searchQuery.trim()}%`;
+        query = query.or(`title.ilike.${q},organization.ilike.${q},description.ilike.${q}`);
+      }
+
+      query = query.order('published_at', { ascending: false });
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+
+      if (!error && data && data.length > 0) {
+        const total = count ?? data.length;
+        return {
+          data: data.map((row: DbGovernmentContent) => mapDbGovernmentContentToUpdate(row)),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 0,
+          isSupabaseSource: true,
+        };
+      }
+    } catch (govErr) {
+      console.warn('[Data Layer] Supabase government_content updates fallback:', govErr);
+    }
+
+    // 2. Legacy government_updates table fallback
     try {
       let query = supabase.from('government_updates').select('*', { count: 'exact' });
 

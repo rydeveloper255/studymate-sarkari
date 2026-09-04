@@ -614,4 +614,65 @@ INSERT INTO job_categories (code, name, slug, description) VALUES
 ('OTHER', 'Other Autonomous Bodies', 'other', 'Statutory councils, research institutes, autonomous regulatory authorities')
 ON CONFLICT (code) DO NOTHING;
 
+-- ==============================================================================
+-- STEP 10: UNIFIED GOVERNMENT CONTENT MASTER TABLE (public.government_content)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS government_content (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_id TEXT,
+    content_type TEXT NOT NULL CHECK (content_type IN (
+        'vacancy',
+        'pre_vacancy_notice',
+        'recruitment_notification',
+        'exam_notification',
+        'exam_schedule',
+        'admit_card',
+        'result',
+        'answer_key',
+        'important_update'
+    )),
+    title TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    organization TEXT NOT NULL,
+    department TEXT,
+    post_name TEXT,
+    vacancy_count TEXT,
+    qualification TEXT[] DEFAULT '{}',
+    age_limit JSONB DEFAULT '{"minAge": 18, "maxAge": 35}',
+    selection_process TEXT[] DEFAULT '{}',
+    fee_details JSONB DEFAULT '{"general": "₹100", "scStPh": "Exempted"}',
+    application_start_at TIMESTAMPTZ,
+    application_end_at TIMESTAMPTZ,
+    published_at DATE NOT NULL,
+    exam_date TEXT,
+    release_date DATE,
+    notification_url TEXT,
+    application_url TEXT,
+    source_url TEXT NOT NULL,
+    region TEXT DEFAULT 'ALL',
+    category TEXT[] DEFAULT '{"vacancy"}',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN (
+        'active', 'upcoming', 'expired', 'closed',
+        'available', 'declared', 'released', 'final', 'provisional', 'archived'
+    )),
+    description TEXT,
+    details JSONB DEFAULT '{}',
+    content_hash TEXT UNIQUE NOT NULL,
+    last_seen_at TIMESTAMPTZ DEFAULT NOW(),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gov_content_type ON government_content(content_type);
+CREATE INDEX IF NOT EXISTS idx_gov_content_status ON government_content(status);
+CREATE INDEX IF NOT EXISTS idx_gov_content_published_at ON government_content(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gov_content_region ON government_content(region);
+CREATE INDEX IF NOT EXISTS idx_gov_content_hash ON government_content(content_hash);
+CREATE INDEX IF NOT EXISTS idx_gov_content_slug ON government_content(slug);
+CREATE INDEX IF NOT EXISTS idx_gov_content_source_id ON government_content(source_id);
+
+ALTER TABLE government_content ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read access for government_content" ON government_content FOR SELECT USING (true);
+
+
 

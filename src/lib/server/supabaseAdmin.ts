@@ -28,6 +28,8 @@ import {
   PublishAction,
   PublishTargetType,
   DbTelegramNotificationLog,
+  DbGovernmentContent,
+  GovernmentContentType,
 } from '../../types';
 import { OFFICIAL_GOVERNMENT_SOURCES } from '../../data/officialSources';
 import { VERIFIED_OFFICIAL_JOB_SOURCES } from '../../data/verifiedJobSources';
@@ -60,6 +62,8 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 }
 
 // In-Memory Fallback Store (Used when Supabase is not connected)
+const inMemoryGovernmentContent: Map<string, DbGovernmentContent> = new Map();
+const inMemoryContentHashes: Set<string> = new Set();
 const inMemorySources: Map<string, DbContentSource> = new Map();
 const inMemoryLogs: DbContentFetchLog[] = [];
 const inMemoryLocks: Set<string> = new Set();
@@ -1527,6 +1531,308 @@ export async function seedJobSourcesToSupabase(): Promise<{
     regionBreakdown,
     categoryBreakdown,
   };
+}
+
+// ==============================================================================
+// STEP 10: UNIFIED GOVERNMENT CONTENT PERSISTENCE & RETRIEVAL (public.government_content)
+// ==============================================================================
+
+export interface GovernmentContentQueryOptions {
+  contentType?: GovernmentContentType | GovernmentContentType[] | string;
+  region?: string;
+  status?: string;
+  sector?: 'central' | 'state';
+  category?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+  page?: number;
+  onlyCutoffValid?: boolean;
+}
+
+/**
+ * Upserts a single verified government record into public.government_content table.
+ * Deduplicates by unique content_hash.
+ */
+export async function upsertGovernmentContent(
+  content: Partial<DbGovernmentContent> & { content_hash: string; title: string; published_at: string; source_url: string; organization: string }
+): Promise<DbGovernmentContent> {
+  const client = getSupabaseAdmin();
+  const nowIso = new Date().toISOString();
+
+  // Strict cutoff enforcement: MUST be on or after 2026-08-01
+  if (content.published_at < '2026-08-01') {
+    throw new Error(`Content published_at date ${content.published_at} is prior to strict cutoff 2026-08-01`);
+  }
+
+  const id = content.id || `gov_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const record: DbGovernmentContent = {
+    id,
+    source_id: content.source_id || 'manual',
+    content_type: (content.content_type as GovernmentContentType) || 'vacancy',
+    title: content.title,
+    slug: content.slug || `gov-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+    organization: content.organization,
+    department: content.department || null,
+    post_name: content.post_name || content.title,
+    vacancy_count: content.vacancy_count || 'Various',
+    qualification: content.qualification || ['As per official notification'],
+    age_limit: content.age_limit || { minAge: 18, maxAge: 35 },
+    selection_process: content.selection_process || ['Written Examination', 'Document Verification'],
+    fee_details: content.fee_details || { general: '₹100', scStPh: 'Exempted' },
+    application_start_at: content.application_start_at || content.published_at,
+    application_end_at: content.application_end_at || null,
+    published_at: content.published_at,
+    exam_date: content.exam_date || null,
+    release_date: content.release_date || content.published_at,
+    notification_url: content.notification_url || content.source_url,
+    application_url: content.application_url || content.source_url,
+    source_url: content.source_url,
+    region: content.region || 'ALL',
+    category: Array.isArray(content.category) ? content.category : [content.category || 'vacancy'],
+    status: content.status || 'active',
+    description: content.description || content.title,
+    details: content.details || {},
+    content_hash: content.content_hash,
+    last_seen_at: nowIso,
+    created_at: content.created_at || nowIso,
+    updated_at: nowIso,
+  };
+
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('government_content')
+        .upsert(
+          {
+            id: record.id,
+            source_id: record.source_id,
+            content_type: record.content_type,
+            title: record.title,
+            slug: record.slug,
+            organization: record.organization,
+            department: record.department,
+            post_name: record.post_name,
+            vacancy_count: String(record.vacancy_count || ''),
+            qualification: record.qualification,
+            age_limit: record.age_limit,
+            selection_process: record.selection_process,
+            fee_details: record.fee_details,
+            application_start_at: record.application_start_at,
+            application_end_at: record.application_end_at,
+            published_at: record.published_at,
+            exam_date: record.exam_date,
+            release_date: record.release_date,
+            notification_url: record.notification_url,
+            application_url: record.application_url,
+            source_url: record.source_url,
+            region: record.region,
+            category: record.category,
+            status: record.status,
+            description: record.description,
+            details: record.details,
+            content_hash: record.content_hash,
+            last_seen_at: record.last_seen_at,
+            updated_at: record.updated_at,
+          },
+          { onConflict: 'content_hash' }
+        )
+        .select('*')
+        .single();
+
+      if (!error && data) {
+        inMemoryGovernmentContent.set(data.id, data as DbGovernmentContent);
+        inMemoryContentHashes.add(data.content_hash);
+        return data as DbGovernmentContent;
+      }
+    } catch (err) {
+      console.warn('[Server Admin] Upsert government_content fallback to in-memory:', err);
+    }
+  }
+
+  // In-memory deduplication by content_hash or id
+  let existingId: string | null = null;
+  for (const [memId, memItem] of inMemoryGovernmentContent.entries()) {
+    if (memItem.content_hash === record.content_hash || memItem.slug === record.slug) {
+      existingId = memId;
+      break;
+    }
+  }
+
+  if (existingId) {
+    const existing = inMemoryGovernmentContent.get(existingId)!;
+    const updatedRecord = { ...existing, ...record, id: existingId, last_seen_at: nowIso, updated_at: nowIso };
+    inMemoryGovernmentContent.set(existingId, updatedRecord);
+    return updatedRecord;
+  }
+
+  inMemoryGovernmentContent.set(record.id, record);
+  inMemoryContentHashes.add(record.content_hash);
+  return record;
+}
+
+/**
+ * Queries published government content with multi-criteria filtering and pagination.
+ */
+export async function getGovernmentContent(
+  options: GovernmentContentQueryOptions = {}
+): Promise<{ data: DbGovernmentContent[]; total: number; page: number; limit: number }> {
+  const limit = Math.min(Math.max(options.limit || 20, 1), 100);
+  const page = Math.max(options.page || 1, 1);
+  const offset = options.offset !== undefined ? options.offset : (page - 1) * limit;
+
+  const client = getSupabaseAdmin();
+  if (client) {
+    try {
+      let query = client
+        .from('government_content')
+        .select('*', { count: 'exact' });
+
+      // Filter by content_type
+      if (options.contentType) {
+        if (Array.isArray(options.contentType)) {
+          query = query.in('content_type', options.contentType);
+        } else if (options.contentType !== 'all') {
+          query = query.eq('content_type', options.contentType);
+        }
+      }
+
+      // Filter by region / state
+      if (options.region && options.region !== 'ALL') {
+        query = query.or(`region.eq.${options.region},region.eq.ALL`);
+      }
+
+      // Filter by status
+      if (options.status && options.status !== 'all') {
+        query = query.eq('status', options.status);
+      }
+
+      // Filter by sector (central vs state)
+      if (options.sector) {
+        if (options.sector === 'central') {
+          query = query.eq('region', 'ALL');
+        } else {
+          query = query.neq('region', 'ALL');
+        }
+      }
+
+      // Search keyword
+      if (options.search && options.search.trim()) {
+        const term = `%${options.search.trim()}%`;
+        query = query.or(`title.ilike.${term},organization.ilike.${term},post_name.ilike.${term}`);
+      }
+
+      // Order by latest published_at
+      query = query
+        .order('published_at', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      const { data, error, count } = await query;
+
+      if (!error && data && data.length > 0) {
+        return {
+          data: data as DbGovernmentContent[],
+          total: count || data.length,
+          page,
+          limit,
+        };
+      }
+    } catch (err) {
+      console.warn('[Server Admin] Query government_content from Supabase failed, using memory store:', err);
+    }
+  }
+
+  // Memory filtering
+  let items = Array.from(inMemoryGovernmentContent.values());
+
+  // Strict cutoff filter (>= 2026-08-01)
+  items = items.filter((i) => i.published_at >= '2026-08-01');
+
+  // Filter by content_type
+  if (options.contentType) {
+    if (Array.isArray(options.contentType)) {
+      items = items.filter((i) => options.contentType!.includes(i.content_type));
+    } else if (options.contentType !== 'all') {
+      items = items.filter((i) => i.content_type === options.contentType);
+    }
+  }
+
+  // Filter by region
+  if (options.region && options.region !== 'ALL') {
+    items = items.filter((i) => i.region === options.region || i.region === 'ALL' || !i.region);
+  }
+
+  // Filter by status
+  if (options.status && options.status !== 'all') {
+    items = items.filter((i) => (i.status || '').toLowerCase() === options.status!.toLowerCase());
+  }
+
+  // Filter by sector
+  if (options.sector) {
+    if (options.sector === 'central') {
+      items = items.filter((i) => i.region === 'ALL' || !i.region);
+    } else {
+      items = items.filter((i) => i.region && i.region !== 'ALL');
+    }
+  }
+
+  // Search keyword
+  if (options.search && options.search.trim()) {
+    const term = options.search.trim().toLowerCase();
+    items = items.filter(
+      (i) =>
+        i.title.toLowerCase().includes(term) ||
+        i.organization.toLowerCase().includes(term) ||
+        (i.post_name && i.post_name.toLowerCase().includes(term))
+    );
+  }
+
+  // Sort descending by published_at
+  items.sort((a, b) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
+
+  const total = items.length;
+  const paginatedData = items.slice(offset, offset + limit);
+
+  return {
+    data: paginatedData,
+    total,
+    page,
+    limit,
+  };
+}
+
+/**
+ * Retrieves a single government content item by slug or UUID.
+ */
+export async function getGovernmentContentByIdOrSlug(
+  idOrSlug: string
+): Promise<DbGovernmentContent | null> {
+  const client = getSupabaseAdmin();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from('government_content')
+        .select('*')
+        .or(`slug.eq.${idOrSlug},id.eq.${idOrSlug}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!error && data) {
+        return data as DbGovernmentContent;
+      }
+    } catch (err) {
+      console.warn('[Server Admin] getGovernmentContentByIdOrSlug Supabase error:', err);
+    }
+  }
+
+  for (const item of inMemoryGovernmentContent.values()) {
+    if (item.slug === idOrSlug || item.id === idOrSlug) {
+      return item;
+    }
+  }
+
+  return null;
 }
 
 

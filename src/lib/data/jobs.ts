@@ -1,7 +1,7 @@
 import { getSupabase } from '../supabase';
 import { JobVacancy, JobFilterState } from '../../types';
-import { DbGovernmentJob, PaginatedResult, DataFetchOptions } from '../../types/database';
-import { mapDbJobToVacancy } from './mappers';
+import { DbGovernmentJob, DbGovernmentContent, PaginatedResult, DataFetchOptions } from '../../types/database';
+import { mapDbJobToVacancy, mapDbGovernmentContentToVacancy } from './mappers';
 
 /**
  * Fetch a paginated list of government vacancies with optional filters
@@ -14,6 +14,61 @@ export async function fetchJobs(
   const supabase = getSupabase();
 
   if (supabase) {
+    // 1. Check Master Table: public.government_content
+    try {
+      let query = supabase
+        .from('government_content')
+        .select('*', { count: 'exact' })
+        .in('content_type', ['vacancy', 'recruitment_notification', 'pre_vacancy_notice']);
+
+      // Sector / Region filter
+      if (options.sector && options.sector !== 'all') {
+        if (options.sector === 'central') {
+          query = query.eq('region', 'ALL');
+        } else {
+          query = query.neq('region', 'ALL');
+        }
+      }
+
+      if (options.state && options.state !== 'All') {
+        query = query.or(`region.ilike.${options.state},region.eq.ALL`);
+      }
+
+      // Status filter
+      if (options.status) {
+        query = query.eq('status', options.status.toLowerCase());
+      }
+
+      // Search query
+      if (options.searchQuery && options.searchQuery.trim()) {
+        const q = `%${options.searchQuery.trim()}%`;
+        query = query.or(`title.ilike.${q},organization.ilike.${q},post_name.ilike.${q}`);
+      }
+
+      query = query.order('published_at', { ascending: false });
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+
+      if (!error && data && data.length > 0) {
+        const total = count ?? data.length;
+        return {
+          data: data.map((row: DbGovernmentContent) => mapDbGovernmentContentToVacancy(row)),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 0,
+          isSupabaseSource: true,
+        };
+      }
+    } catch (govErr) {
+      console.warn('[Data Layer] Supabase government_content query fallback:', govErr);
+    }
+
+    // 2. Fallback to legacy government_jobs table
     try {
       let query = supabase
         .from('government_jobs')
@@ -186,6 +241,21 @@ export async function fetchJobBySlugOrId(slugOrId: string): Promise<JobVacancy |
 
   if (supabase) {
     try {
+      const { data: govData, error: govErr } = await supabase
+        .from('government_content')
+        .select('*')
+        .or(`slug.eq.${slugOrId},id.eq.${slugOrId}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!govErr && govData) {
+        return mapDbGovernmentContentToVacancy(govData as DbGovernmentContent);
+      }
+    } catch (err) {
+      // Fallback
+    }
+
+    try {
       const { data, error } = await supabase
         .from('government_jobs')
         .select('*')
@@ -204,6 +274,18 @@ export async function fetchJobBySlugOrId(slugOrId: string): Promise<JobVacancy |
   // Browser fallback
   if (typeof window !== 'undefined') {
     try {
+      const res = await fetch(`/api/public/content/${encodeURIComponent(slugOrId)}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json?.data) {
+          return mapDbGovernmentContentToVacancy(json.data);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    try {
       const res = await fetch(`/api/public/jobs/${encodeURIComponent(slugOrId)}`);
       if (res.ok) {
         const json = await res.json();
@@ -219,7 +301,11 @@ export async function fetchJobBySlugOrId(slugOrId: string): Promise<JobVacancy |
   // Server test fallback
   if (typeof window === 'undefined') {
     try {
-      const { getJobBySlugOrId } = await import('../server/supabaseAdmin');
+      const { getGovernmentContentByIdOrSlug, getJobBySlugOrId } = await import('../server/supabaseAdmin');
+      const item = await getGovernmentContentByIdOrSlug(slugOrId);
+      if (item) {
+        return mapDbGovernmentContentToVacancy(item);
+      }
       const job = await getJobBySlugOrId(slugOrId);
       if (job) {
         return mapDbJobToVacancy(job);

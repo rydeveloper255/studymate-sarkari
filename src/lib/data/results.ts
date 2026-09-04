@@ -1,7 +1,7 @@
 import { getSupabase } from '../supabase';
 import { ResultItem, JobSector } from '../../types';
-import { DbExamResult, PaginatedResult } from '../../types/database';
-import { mapDbResultToItem } from './mappers';
+import { DbExamResult, DbGovernmentContent, PaginatedResult } from '../../types/database';
+import { mapDbResultToItem, mapDbGovernmentContentToResult } from './mappers';
 
 export interface ResultsFetchOptions {
   sector?: 'all' | JobSector;
@@ -19,6 +19,54 @@ export async function fetchResults(
   const supabase = getSupabase();
 
   if (supabase) {
+    // 1. Check Master Table: government_content
+    try {
+      let query = supabase
+        .from('government_content')
+        .select('*', { count: 'exact' })
+        .eq('content_type', 'result');
+
+      if (options.sector && options.sector !== 'all') {
+        if (options.sector === 'central') {
+          query = query.eq('region', 'ALL');
+        } else {
+          query = query.neq('region', 'ALL');
+        }
+      }
+
+      if (options.stateName) {
+        query = query.or(`region.ilike.${options.stateName},region.eq.ALL`);
+      }
+
+      if (options.searchQuery && options.searchQuery.trim()) {
+        const q = `%${options.searchQuery.trim()}%`;
+        query = query.or(`title.ilike.${q},organization.ilike.${q},post_name.ilike.${q}`);
+      }
+
+      query = query.order('published_at', { ascending: false });
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      query = query.range(from, to);
+
+      const { data, error, count } = await query;
+
+      if (!error && data && data.length > 0) {
+        const total = count ?? data.length;
+        return {
+          data: data.map((row: DbGovernmentContent) => mapDbGovernmentContentToResult(row)),
+          total,
+          page,
+          pageSize,
+          totalPages: Math.ceil(total / pageSize) || 0,
+          isSupabaseSource: true,
+        };
+      }
+    } catch (govErr) {
+      console.warn('[Data Layer] Supabase government_content results fallback:', govErr);
+    }
+
+    // 2. Legacy exam_results table fallback
     try {
       let query = supabase.from('exam_results').select('*', { count: 'exact' });
 
@@ -43,7 +91,7 @@ export async function fetchResults(
 
       const { data, error, count } = await query;
 
-      if (!error && data) {
+      if (!error && data && data.length > 0) {
         const total = count ?? data.length;
         return {
           data: data.map((row: DbExamResult) => mapDbResultToItem(row)),
@@ -62,7 +110,22 @@ export async function fetchResults(
   // Node test fallback
   if (typeof window === 'undefined') {
     try {
-      const { inMemoryResults } = await import('../server/supabaseAdmin') as any;
+      const { inMemoryGovernmentContent, inMemoryResults } = await import('../server/supabaseAdmin') as any;
+      if (inMemoryGovernmentContent && inMemoryGovernmentContent.size > 0) {
+        const items = Array.from(inMemoryGovernmentContent.values())
+          .filter((row: any) => row.content_type === 'result')
+          .map((row: any) => mapDbGovernmentContentToResult(row));
+        if (items.length > 0) {
+          return {
+            data: items,
+            total: items.length,
+            page,
+            pageSize,
+            totalPages: Math.ceil(items.length / pageSize) || 1,
+            isSupabaseSource: false,
+          };
+        }
+      }
       if (inMemoryResults && inMemoryResults.size > 0) {
         const items = Array.from(inMemoryResults.values()).map((row: any) =>
           mapDbResultToItem(row)

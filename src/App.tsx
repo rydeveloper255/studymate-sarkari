@@ -3,10 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { NotificationProvider } from './lib/notifications/NotificationContext';
+import { checkGovernmentContentConnection } from './lib/connectionChecker';
 import { HomePage } from './pages/HomePage';
 import { LatestJobsPage } from './pages/LatestJobsPage';
 import { CentralJobsPage } from './pages/CentralJobsPage';
@@ -25,6 +26,11 @@ import { ContactPage } from './pages/ContactPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 
 export default function App() {
+  useEffect(() => {
+    // Verify connection to the government_content table and log record counts
+    checkGovernmentContentConnection();
+  }, []);
+
   return (
     <NotificationProvider>
       <Router>

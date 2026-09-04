@@ -83,10 +83,14 @@ export interface ContentFetchAdapter {
 
 export type ScrapedNoticeType =
   | 'vacancy'
+  | 'pre_vacancy_notice'
   | 'recruitment_notification'
+  | 'exam_notification'
+  | 'exam_schedule'
   | 'admit_card'
   | 'result'
   | 'answer_key'
+  | 'important_update'
   | 'exam_update';
 
 /**
@@ -115,48 +119,79 @@ export interface RawScrapedNotice {
     relaxationDetails?: string | null;
   };
   applicationFee?: {
-    general?: number | null;
-    reserved?: number | null;
-    female?: number | null;
+    general?: number | string | null;
+    reserved?: number | string | null;
+    female?: number | string | null;
     exempted?: boolean;
+    paymentMode?: string;
   };
+  selectionProcess?: string[] | string | null;
   summary?: string;
   rawHtmlOrText?: string;
   detectedType?: ScrapedNoticeType;
+  details?: Record<string, any>;
 }
 
 /**
  * Validated scraped government item ready for Supabase persistence
- * (Supports Vacancies, Admit Cards, Results, Answer Keys, and Exam Updates)
+ * (Stored in public.government_content unified master table)
  */
 export interface ValidatedScrapedItem {
   id?: string;
-  itemType: ScrapedNoticeType;
+  contentType: ScrapedNoticeType;
+  itemType: ScrapedNoticeType; // Backwards compatible alias
   sourceId: string;
   sourceName: string;
   title: string;
   slug: string;
   organization: string;
+  department?: string | null;
+  postName?: string;
   sector: 'central' | 'state' | 'banking' | 'defense' | 'railways' | 'teaching';
   stateCode?: string | null;
+  region?: string;
   category: string[];
   publicationDate: string; // ISO format (YYYY-MM-DD), must be >= 2026-08-01
   officialNotificationUrl: string;
   officialApplyUrl?: string | null;
   officialWebsiteUrl: string;
+  sourceUrl: string;
   contentHash: string;
   scrapedAt: string;
   isLive: boolean;
-  status: 'active' | 'upcoming' | 'closed' | 'archived' | 'Available' | 'Expected Soon' | 'Delayed' | 'Declared' | 'Final' | 'Provisional';
+  status:
+    | 'active'
+    | 'upcoming'
+    | 'expired'
+    | 'closed'
+    | 'available'
+    | 'declared'
+    | 'released'
+    | 'final'
+    | 'provisional'
+    | 'archived'
+    | 'Available'
+    | 'Expected Soon'
+    | 'Delayed'
+    | 'Declared'
+    | 'Final'
+    | 'Provisional';
 
-  // Vacancy-specific fields
-  postName?: string;
+  // Structured fields for public.government_content
+  vacancyCount?: string | number | null;
+  totalVacancies?: number | string;
+  qualification?: string[];
+  ageLimit?: Record<string, any>;
+  feeDetails?: Record<string, any>;
+  selectionProcess?: string[];
+  description?: string;
+  details?: Record<string, any>;
+
+  // Vacancy specific fields
   notificationNumber?: string | null;
   applyStartDate?: string | null;
   applyEndDate?: string | null;
   examDate?: string | null;
-  totalVacancies?: number | string;
-  qualification?: string[];
 
   // Admit Card specific fields
   examName?: string;
@@ -172,8 +207,20 @@ export interface ValidatedScrapedItem {
   // Answer Key specific fields
   objectionLastDate?: string | null;
 
-  // Exam Update specific fields
-  updateType?: 'recruitment' | 'exam_notice' | 'admit_card' | 'result' | 'answer_key' | 'cutoff' | 'selection_list' | 'other';
+  // Update specific fields
+  updateType?:
+    | 'recruitment'
+    | 'pre_vacancy_notice'
+    | 'exam_notice'
+    | 'exam_notification'
+    | 'exam_schedule'
+    | 'admit_card'
+    | 'result'
+    | 'answer_key'
+    | 'cutoff'
+    | 'selection_list'
+    | 'important_update'
+    | 'other';
   summary?: string;
 }
 

@@ -20,7 +20,9 @@ import {
   ValidatedScrapedVacancy,
   RawScrapedNotice,
   FetchResult,
+  ScrapedNoticeType,
 } from './types';
+import { createHash } from 'crypto';
 import { AdapterRegistry } from './adapters/adapterRegistry';
 import { HtmlFetchAdapter } from './adapters/htmlAdapter';
 import { PdfFetchAdapter } from './adapters/pdfAdapter';
@@ -301,18 +303,31 @@ export class CoreScraperEngine {
     raw: RawScrapedNotice,
     source: JobSourceRecord,
     verifiedDate: string,
-    contentHash: string
+    _rawContentHash: string
   ): ValidatedScrapedItem {
     const postName = raw.postName || raw.title;
     const org = raw.organization || source.organization || source.name;
     const slug = this.generateSlug(org, postName, raw.notificationNumber, verifiedDate);
 
     // Sector determination
-    const region = (source.region || '').toUpperCase();
+    const region = (source.region || 'ALL').toUpperCase();
     const isCentral = region === 'ALL' || !region;
     const sector = isCentral ? 'central' : 'state';
 
-    // Live status rule: application_start <= NOW <= application_end
+    const rawType = (raw.detectedType || 'vacancy') as ScrapedNoticeType;
+    let contentType: ScrapedNoticeType = rawType;
+    if (rawType === 'exam_update') {
+      contentType = 'important_update';
+    }
+
+    // Determine deterministic content_hash
+    const normalizedTitle = (raw.title || '').trim().toLowerCase();
+    const targetUrl = raw.officialNotificationUrl || source.recruitment_url || source.official_url;
+    const notifNo = raw.notificationNumber || '';
+    const hashPayload = `${source.id}|${contentType}|${targetUrl}|${notifNo}|${normalizedTitle}|${org}|${verifiedDate}`;
+    const contentHash = createHash('sha256').update(hashPayload).digest('hex');
+
+    // Live status rule based on content type and dates
     const now = new Date().toISOString().split('T')[0];
     const startDate = raw.applyStartDate || verifiedDate;
     const endDate = raw.applyEndDate;
@@ -320,22 +335,35 @@ export class CoreScraperEngine {
     let status: any = 'active';
     let isLive = true;
 
-    if (raw.detectedType === 'admit_card') {
-      status = 'Available';
+    if (contentType === 'admit_card') {
+      status = 'available';
       isLive = true;
-    } else if (raw.detectedType === 'result') {
-      status = 'Declared';
+    } else if (contentType === 'result') {
+      status = 'declared';
       isLive = true;
-    } else if (raw.detectedType === 'answer_key') {
-      status = 'Final';
+    } else if (contentType === 'answer_key') {
+      status = 'released';
+      isLive = true;
+    } else if (contentType === 'pre_vacancy_notice') {
+      status = 'upcoming';
+      isLive = true;
+    } else if (contentType === 'exam_notification' || contentType === 'exam_schedule') {
+      status = 'active';
+      isLive = true;
+    } else if (contentType === 'important_update') {
+      status = 'active';
       isLive = true;
     } else {
+      // Vacancy / Recruitment Notification
       if (startDate > now) {
         status = 'upcoming';
         isLive = false;
       } else if (endDate && endDate < now) {
-        status = 'closed';
+        status = 'expired';
         isLive = false;
+      } else {
+        status = 'active';
+        isLive = true;
       }
     }
 
@@ -343,16 +371,23 @@ export class CoreScraperEngine {
       ? source.category
       : [source.category || 'vacancy'];
 
+    const qualifications = Array.isArray(raw.qualification)
+      ? raw.qualification
+      : [raw.qualification || 'As per official notification'];
+
     return {
-      itemType: raw.detectedType || 'vacancy',
+      contentType,
+      itemType: contentType,
       sourceId: source.id,
       sourceName: source.name,
       title: raw.title,
       slug,
       postName,
       organization: org,
+      department: raw.department || null,
       sector,
       stateCode: isCentral ? null : region,
+      region,
       category: categories,
       notificationNumber: raw.notificationNumber || null,
       publicationDate: verifiedDate, // Guaranteed >= 2026-08-01
@@ -360,16 +395,21 @@ export class CoreScraperEngine {
       applyEndDate: raw.applyEndDate || null,
       examDate: raw.examDate || null,
       totalVacancies: raw.totalVacancies || 'Various',
-      qualification: Array.isArray(raw.qualification)
-        ? raw.qualification
-        : [raw.qualification || 'As per official notification'],
+      vacancyCount: raw.totalVacancies || 'Various',
+      qualification: qualifications,
+      ageLimit: raw.ageLimit || { minAge: 18, maxAge: 35 },
+      feeDetails: raw.applicationFee || { general: '₹100', scStPh: 'Exempted' },
+      selectionProcess: Array.isArray(raw.selectionProcess) ? raw.selectionProcess : ['Written Examination', 'Document Verification'],
       officialNotificationUrl: raw.officialNotificationUrl || source.recruitment_url || source.official_url,
       officialApplyUrl: raw.officialApplyUrl || source.recruitment_url || source.official_url,
       officialWebsiteUrl: source.official_url,
+      sourceUrl: source.recruitment_url || source.official_url,
       contentHash,
       isLive,
       status,
       scrapedAt: new Date().toISOString(),
+      description: raw.summary || raw.title,
+      details: raw.details || {},
 
       // Admit Card fields
       examName: postName,
@@ -386,13 +426,17 @@ export class CoreScraperEngine {
 
       // Update fields
       updateType:
-        raw.detectedType === 'admit_card'
+        contentType === 'admit_card'
           ? 'admit_card'
-          : raw.detectedType === 'result'
+          : contentType === 'result'
           ? 'result'
-          : raw.detectedType === 'answer_key'
+          : contentType === 'answer_key'
           ? 'answer_key'
-          : 'recruitment',
+          : contentType === 'exam_schedule'
+          ? 'exam_schedule'
+          : contentType === 'pre_vacancy_notice'
+          ? 'pre_vacancy_notice'
+          : 'important_update',
       summary: raw.summary,
     };
   }

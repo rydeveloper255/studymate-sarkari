@@ -8,3 +8,4 @@ export * from './answerKeys';
 export * from './organizations';
 export * from './sources';
 export * from './search';
+export * from '../connectionChecker';

@@ -12,6 +12,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { JobSourceRecord, ValidatedScrapedItem, ValidatedScrapedVacancy, FetchResult } from './types';
 import { VERIFIED_OFFICIAL_JOB_SOURCES } from '../../data/verifiedJobSources';
 import {
+  upsertGovernmentContent,
   upsertPublishedJob,
   upsertPublishedUpdate,
   upsertPublishedAdmitCard,
@@ -201,23 +202,70 @@ export async function persistValidatedItems(
   const telegramService = getTelegramService();
 
   for (const item of items) {
-    // 1. Strict Cutoff Verification
+    // 1. Strict Cutoff Verification (>= 2026-08-01)
     if (!item.publicationDate || item.publicationDate < '2026-08-01') {
       skipped++;
       continue;
     }
 
-    // 2. Stable Deduplication Fingerprint
-    const dedupKey = `${item.sourceId}_${item.itemType}_${item.officialNotificationUrl || item.slug}_${item.publicationDate}`;
+    // 2. Stable Content Hash Deduplication
+    const dedupKey = item.contentHash || `${item.sourceId}_${item.itemType}_${item.officialNotificationUrl || item.slug}_${item.publicationDate}`;
     if (processedDeduplicationKeys.has(dedupKey)) {
       skipped++;
       continue;
     }
     processedDeduplicationKeys.add(dedupKey);
 
+    const type = item.contentType || item.itemType || 'vacancy';
+
     try {
-      if (item.itemType === 'vacancy' || item.itemType === 'recruitment_notification') {
-        // Map to DbGovernmentJob
+      // 3. Persist into Master Unified Table: public.government_content
+      const govContent = await upsertGovernmentContent({
+        id: item.id || `gov-${item.slug}`,
+        source_id: item.sourceId,
+        content_type: type as any,
+        title: item.title,
+        slug: item.slug,
+        organization: item.organization,
+        department: item.department || null,
+        post_name: item.postName || item.title,
+        vacancy_count: item.vacancyCount || item.totalVacancies || 'Various',
+        qualification: item.qualification || ['As per official notification'],
+        age_limit: item.ageLimit || { minAge: 18, maxAge: 35 },
+        selection_process: item.selectionProcess || ['Written Examination', 'Document Verification'],
+        fee_details: item.feeDetails || { general: '₹100', scStPh: 'Exempted' },
+        application_start_at: item.applyStartDate || item.publicationDate,
+        application_end_at: item.applyEndDate || null,
+        published_at: item.publicationDate,
+        exam_date: item.examDate || null,
+        release_date: item.releaseDate || item.publicationDate,
+        notification_url: item.officialNotificationUrl,
+        application_url: item.officialApplyUrl || item.officialWebsiteUrl,
+        source_url: item.sourceUrl || item.officialNotificationUrl,
+        region: item.region || item.stateCode || 'ALL',
+        category: Array.isArray(item.category) ? item.category : [item.category || 'vacancy'],
+        status: item.status || 'active',
+        description: item.description || item.summary || item.title,
+        details: item.details || {},
+        content_hash: item.contentHash || dedupKey,
+      });
+
+      // 4. Update breakdown counts
+      if (type === 'vacancy' || type === 'recruitment_notification') {
+        vacanciesSaved++;
+      } else if (type === 'admit_card') {
+        admitCardsSaved++;
+      } else if (type === 'result') {
+        resultsSaved++;
+      } else if (type === 'answer_key') {
+        answerKeysSaved++;
+      } else {
+        updatesSaved++;
+      }
+      inserted++;
+
+      // 5. Also sync to legacy tables for backwards compatibility
+      if (type === 'vacancy' || type === 'recruitment_notification') {
         const job = await upsertPublishedJob({
           id: item.id || `job-${item.slug}`,
           slug: item.slug,
@@ -237,7 +285,7 @@ export async function persistValidatedItems(
             examDate: item.examDate || '',
           },
           selection_process: ['Written Examination', 'Document Verification'],
-          status: item.status === 'upcoming' ? 'Upcoming' : item.status === 'closed' ? 'Closed' : 'Active',
+          status: item.status === 'upcoming' ? 'Upcoming' : item.status === 'closed' || item.status === 'expired' ? 'Closed' : 'Active',
           is_active: item.isLive,
           published_date: item.publicationDate,
           summary: `${item.organization} has officially released recruitment advertisement for ${item.postName || item.title}.`,
@@ -247,7 +295,6 @@ export async function persistValidatedItems(
           source_url: item.officialNotificationUrl,
         });
 
-        // Also sync update entry for latest notifications board
         await upsertPublishedUpdate({
           id: `upd-${item.slug}`,
           title: item.title,
@@ -261,14 +308,10 @@ export async function persistValidatedItems(
           job_id: job.id,
         });
 
-        vacanciesSaved++;
-        inserted++;
-
-        // Trigger Telegram non-blockingly
         if (telegramService.isEnabled()) {
           telegramService.handlePublishedItem(job).catch(() => {});
         }
-      } else if (item.itemType === 'admit_card') {
+      } else if (type === 'admit_card') {
         const card = await upsertPublishedAdmitCard({
           id: item.id || `card-${item.slug}`,
           title: item.title,
@@ -295,13 +338,10 @@ export async function persistValidatedItems(
           is_high_priority: true,
         });
 
-        admitCardsSaved++;
-        inserted++;
-
         if (telegramService.isEnabled()) {
           telegramService.handlePublishedItem(card).catch(() => {});
         }
-      } else if (item.itemType === 'result') {
+      } else if (type === 'result') {
         const res = await upsertPublishedResult({
           id: item.id || `res-${item.slug}`,
           title: item.title,
@@ -327,13 +367,10 @@ export async function persistValidatedItems(
           is_high_priority: true,
         });
 
-        resultsSaved++;
-        inserted++;
-
         if (telegramService.isEnabled()) {
           telegramService.handlePublishedItem(res).catch(() => {});
         }
-      } else if (item.itemType === 'answer_key') {
+      } else if (type === 'answer_key') {
         const key = await upsertPublishedAnswerKey({
           id: item.id || `key-${item.slug}`,
           title: item.title,
@@ -359,14 +396,10 @@ export async function persistValidatedItems(
           is_high_priority: false,
         });
 
-        answerKeysSaved++;
-        inserted++;
-
         if (telegramService.isEnabled()) {
           telegramService.handlePublishedItem(key).catch(() => {});
         }
       } else {
-        // Exam Update / Notice / Corrigendum / Schedule
         const update = await upsertPublishedUpdate({
           id: item.id || `upd-${item.slug}`,
           title: item.title,
@@ -378,9 +411,6 @@ export async function persistValidatedItems(
           badge_tag: 'Exam Notice',
           is_high_priority: false,
         });
-
-        updatesSaved++;
-        inserted++;
 
         if (telegramService.isEnabled()) {
           telegramService.handlePublishedItem(update).catch(() => {});

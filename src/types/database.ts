@@ -13,6 +13,69 @@ import {
   AgeLimit,
 } from './index';
 
+/**
+ * 9 Standard Government Content Types supported by the Unified Scraper Engine
+ */
+export type GovernmentContentType =
+  | 'vacancy'
+  | 'pre_vacancy_notice'
+  | 'recruitment_notification'
+  | 'exam_notification'
+  | 'exam_schedule'
+  | 'admit_card'
+  | 'result'
+  | 'answer_key'
+  | 'important_update';
+
+export type GovernmentContentStatus =
+  | 'active'
+  | 'upcoming'
+  | 'expired'
+  | 'closed'
+  | 'available'
+  | 'declared'
+  | 'released'
+  | 'final'
+  | 'provisional'
+  | 'archived';
+
+/**
+ * Unified public.government_content Supabase Table Schema
+ * Single Master Table for all scraped government information
+ */
+export interface DbGovernmentContent {
+  id: string;
+  source_id: string;
+  content_type: GovernmentContentType;
+  title: string;
+  slug: string;
+  organization: string;
+  department?: string | null;
+  post_name?: string | null;
+  vacancy_count?: number | string | null;
+  qualification?: string[] | string | null;
+  age_limit?: AgeLimit | Record<string, any> | string | null;
+  selection_process?: string[] | string | null;
+  fee_details?: ApplicationFee | Record<string, any> | string | null;
+  application_start_at?: string | null;
+  application_end_at?: string | null;
+  published_at: string; // ISO format date (YYYY-MM-DD), strictly >= '2026-08-01'
+  exam_date?: string | null;
+  release_date?: string | null;
+  notification_url?: string | null;
+  application_url?: string | null;
+  source_url: string;
+  region?: string | null; // e.g. 'ALL', 'UP', 'DL', 'BR', etc.
+  category?: string[] | string | null; // e.g. ['central', 'upsc'], ['state', 'police'], etc.
+  status: GovernmentContentStatus | string;
+  description?: string | null;
+  details?: Record<string, any> | null;
+  content_hash: string;
+  last_seen_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface DbGovernmentJob {
   id: string;
   slug: string;

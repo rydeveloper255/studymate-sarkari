@@ -7,6 +7,7 @@ import {
   DbAnswerKey,
   DbOrganization,
   DbContentSource,
+  DbGovernmentContent,
 } from '../../types/database';
 import {
   JobVacancy,
@@ -18,6 +19,125 @@ import {
   OrganizationInfo,
   ContentSourceInfo,
 } from '../../types';
+
+export function mapDbGovernmentContentToVacancy(row: DbGovernmentContent): JobVacancy {
+  const isCentral = !row.region || row.region === 'ALL';
+  return {
+    id: row.id,
+    slug: row.slug || row.id,
+    title: row.title || 'Government Vacancy',
+    organization: row.organization || 'Government Organization',
+    deptOrMinistry: row.department || undefined,
+    postName: row.post_name || row.title,
+    sector: isCentral ? 'central' : 'state',
+    centralCategory: isCentral ? (Array.isArray(row.category) ? row.category[0] : row.category) : undefined,
+    stateCode: isCentral ? undefined : row.region,
+    stateName: isCentral ? undefined : row.region,
+    totalVacancies: String(row.vacancy_count || 'Various'),
+    qualification: Array.isArray(row.qualification) ? row.qualification : [row.qualification || 'As per official notification'],
+    ageLimit: row.age_limit || {
+      minAge: '18',
+      maxAge: '35',
+      asOnDate: 'As per notification',
+      relaxationDetails: 'Category relaxations applicable',
+    },
+    applicationFee: row.fee_details || {
+      general: '₹100',
+      scStPh: 'Exempted',
+      paymentMode: 'Online via Net Banking / Debit Card / UPI',
+    },
+    importantDates: {
+      notificationDate: row.published_at || 'Announced',
+      applyStartDate: row.application_start_at || row.published_at || 'Announced',
+      applyEndDate: row.application_end_at || 'Refer notification',
+      examDate: row.exam_date || undefined,
+    },
+    selectionProcess: Array.isArray(row.selection_process) ? row.selection_process : ['Written Examination', 'Document Verification'],
+    salaryOrPayScale: undefined,
+    status: row.status === 'upcoming' ? 'Upcoming' : row.status === 'expired' || row.status === 'closed' ? 'Closed' : 'Active',
+    isDemo: false,
+    publishedDate: row.published_at || new Date().toISOString().split('T')[0],
+    summary: row.description || row.title || '',
+    importantInstructions: undefined,
+    officialNotificationUrl: row.notification_url || row.source_url || '#',
+    officialApplyUrl: row.application_url || row.source_url || '#',
+    officialWebsiteUrl: row.source_url || '#',
+  };
+}
+
+export function mapDbGovernmentContentToAdmitCard(row: DbGovernmentContent): AdmitCardItem {
+  const isCentral = !row.region || row.region === 'ALL';
+  return {
+    id: row.id,
+    title: row.title,
+    organization: row.organization,
+    examName: row.post_name || row.title,
+    sector: isCentral ? 'central' : 'state',
+    stateName: isCentral ? undefined : row.region,
+    releaseDate: row.release_date || row.published_at,
+    examDate: row.exam_date || row.published_at,
+    status: row.status === 'available' || row.status === 'Available' ? 'Available' : 'Released',
+    downloadUrl: row.notification_url || row.source_url || '#',
+    isDemo: false,
+    instructions: 'Download hall ticket using official registration ID and password.',
+  };
+}
+
+export function mapDbGovernmentContentToResult(row: DbGovernmentContent): ResultItem {
+  const isCentral = !row.region || row.region === 'ALL';
+  return {
+    id: row.id,
+    title: row.title,
+    organization: row.organization,
+    examName: row.post_name || row.title,
+    sector: isCentral ? 'central' : 'state',
+    stateName: isCentral ? undefined : row.region,
+    resultDate: row.release_date || row.published_at,
+    status: 'Declared',
+    viewUrl: row.notification_url || row.source_url || '#',
+    isDemo: false,
+    cutOffAvailable: true,
+  };
+}
+
+export function mapDbGovernmentContentToAnswerKey(row: DbGovernmentContent): AnswerKeyItem {
+  const isCentral = !row.region || row.region === 'ALL';
+  return {
+    id: row.id,
+    title: row.title,
+    organization: row.organization,
+    examName: row.post_name || row.title,
+    sector: isCentral ? 'central' : 'state',
+    stateName: isCentral ? undefined : row.region,
+    releaseDate: row.release_date || row.published_at,
+    objectionLastDate: row.application_end_at || undefined,
+    viewUrl: row.notification_url || row.source_url || '#',
+    isDemo: false,
+    status: 'Released',
+  };
+}
+
+export function mapDbGovernmentContentToUpdate(row: DbGovernmentContent): GovernmentUpdate {
+  return {
+    id: row.id,
+    title: row.title,
+    category:
+      row.content_type === 'admit_card'
+        ? 'admit_card'
+        : row.content_type === 'result'
+        ? 'result'
+        : row.content_type === 'answer_key'
+        ? 'answer_key'
+        : 'recruitment',
+    organization: row.organization,
+    date: row.published_at || new Date().toISOString().split('T')[0],
+    summary: row.description || row.title || '',
+    isDemo: false,
+    linkUrl: row.notification_url || row.source_url || undefined,
+    badgeTag: row.content_type.replace('_', ' ').toUpperCase(),
+    isHighPriority: true,
+  };
+}
 
 export function mapDbJobToVacancy(row: DbGovernmentJob): JobVacancy {
   return {

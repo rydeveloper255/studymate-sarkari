@@ -18,6 +18,8 @@ import {
   getAllActiveUpdates,
   getAllRegisteredSources,
   getJobBySlugOrId,
+  getGovernmentContent,
+  getGovernmentContentByIdOrSlug,
 } from '../../lib/server/supabaseAdmin';
 import { serverCache } from '../../lib/server/cache/publicCache';
 
@@ -134,6 +136,79 @@ router.get('/jobs', publicApiRateLimiter, async (req: Request, res: Response) =>
   } catch (err: any) {
     console.error('Error fetching public jobs:', err);
     res.status(500).json({ error: 'Failed to retrieve jobs list' });
+  }
+});
+
+/**
+ * Public Unified Government Content Endpoint (/api/public/content)
+ * Single master endpoint for vacancy, admit card, result, answer key, etc.
+ */
+router.get('/content', publicApiRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const contentType = req.query.type ? sanitizeStringInput(req.query.type as string, 50) : undefined;
+    const region = req.query.region ? sanitizeStringInput(req.query.region as string, 50) : undefined;
+    const status = req.query.status ? sanitizeStringInput(req.query.status as string, 50) : undefined;
+    const sector = req.query.sector as 'central' | 'state' | undefined;
+    const search = req.query.q ? sanitizeStringInput(req.query.q as string, 100) : undefined;
+    const page = sanitizeInteger(req.query.page, 1, 1, 100);
+    const limit = sanitizeInteger(req.query.limit, 20, 1, 50);
+
+    const cacheKey = `gov_content_${contentType || 'all'}_${region || 'all'}_${status || 'all'}_${sector || 'all'}_${search || ''}_${page}_${limit}`;
+    const cached = serverCache.get(cacheKey);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
+    const result = await getGovernmentContent({
+      contentType,
+      region,
+      status,
+      sector,
+      search,
+      page,
+      limit,
+    });
+
+    const payload = {
+      data: result.data,
+      total: result.total,
+      page: result.page,
+      limit: result.limit,
+      totalPages: Math.ceil(result.total / result.limit) || 1,
+    };
+
+    serverCache.set(cacheKey, payload, 60, ['content', 'jobs', 'updates']);
+    res.json(payload);
+  } catch (err) {
+    console.error('Error querying government_content:', err);
+    res.status(500).json({ error: 'Failed to retrieve government content' });
+  }
+});
+
+/**
+ * Public Single Government Content Item Detail
+ */
+router.get('/content/:slugOrId', publicApiRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const slugOrId = sanitizeStringInput(req.params.slugOrId, 120);
+    const cacheKey = `gov_content_detail_${slugOrId}`;
+    const cached = serverCache.get(cacheKey);
+    if (cached) {
+      res.json({ data: cached });
+      return;
+    }
+
+    const item = await getGovernmentContentByIdOrSlug(slugOrId);
+    if (!item) {
+      res.status(404).json({ error: 'Government Content Not Found' });
+      return;
+    }
+
+    serverCache.set(cacheKey, item, 300, ['content']);
+    res.json({ data: item });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch government content item' });
   }
 });
 
