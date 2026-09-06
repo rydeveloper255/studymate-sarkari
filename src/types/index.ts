@@ -147,9 +147,10 @@ export interface StateInfo {
 export interface GovernmentSource {
   id: string;
   name: string;
-  type: 'Central Commission' | 'State PSC' | 'Railway Board' | 'Defence' | 'Banking' | 'Police Recruitment';
+  type: 'Central Commission' | 'State PSC' | 'Railway Board' | 'Defence' | 'Banking' | 'Police Recruitment' | 'Education' | 'National Agency' | 'Research' | 'Insurance' | 'Postal';
   stateOrDomain: string;
   url: string;
+  scope?: string;
   scrapeCategory: 'Jobs' | 'Admit Card' | 'Results' | 'Answer Key' | 'All';
   lastStatus: 'Operational' | 'Active' | 'Rate Limited' | 'Checking';
   lastCheckedTime?: string;

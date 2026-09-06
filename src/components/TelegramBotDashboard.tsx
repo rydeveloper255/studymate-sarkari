@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GovernmentSource, TelegramBotLog } from '../types';
 import { supabaseService, SupabaseConfig } from '../services/supabaseService';
 
@@ -31,6 +31,52 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
   // Supabase settings state
   const [supabaseConfig, setSupabaseConfig] = useState<SupabaseConfig>(supabaseService.getConfig());
   const [supabaseSaveMsg, setSupabaseSaveMsg] = useState('');
+
+  // Telegram Bot Check State
+  const [botCheckResult, setBotCheckResult] = useState<any>(null);
+  const [isCheckingBot, setIsCheckingBot] = useState(false);
+
+  // Sync Live Government Data to Supabase
+  const [isSyncingData, setIsSyncingData] = useState(false);
+  const [syncDataMsg, setSyncDataMsg] = useState('');
+
+  const handleCheckBotConnection = async () => {
+    setIsCheckingBot(true);
+    try {
+      const res = await supabaseService.checkTelegramStatus();
+      setBotCheckResult(res);
+    } catch (e: any) {
+      setBotCheckResult({
+        connected: false,
+        status: 'FETCH_ERROR',
+        message: e.message || 'Failed to connect to verification API',
+      });
+    } finally {
+      setIsCheckingBot(false);
+    }
+  };
+
+  const handleSyncOfficialData = async () => {
+    setIsSyncingData(true);
+    setSyncDataMsg('');
+    try {
+      const res = await supabaseService.syncOfficialDataToSupabase();
+      setSyncDataMsg(res.message);
+      if (res.success) {
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+    } catch (e: any) {
+      setSyncDataMsg(e.message || 'Sync failed');
+    } finally {
+      setIsSyncingData(false);
+    }
+  };
+
+  useEffect(() => {
+    handleCheckBotConnection();
+  }, []);
 
   // Add Link Form State
   const [newLinkName, setNewLinkName] = useState('');
@@ -196,6 +242,87 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
 
           {/* Right 1 Col: Bot Status Card */}
           <div className="space-y-4">
+            {/* Telegram Bot Live Verification Card */}
+            <div className="bg-white rounded-2xl border border-[#d3e4fe] p-5 shadow-xs">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-display font-bold text-sm text-[#00236f] flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[18px] text-[#00236f]">smart_toy</span>
+                  Telegram Bot Status
+                </h3>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    botCheckResult?.connected
+                      ? 'bg-[#85f8c4] text-[#002114]'
+                      : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  {botCheckResult?.connected ? 'CONNECTED 🟢' : 'TOKEN REQUIRED 🟡'}
+                </span>
+              </div>
+
+              {botCheckResult?.connected ? (
+                <div className="bg-[#eff4ff] p-3 rounded-xl space-y-1.5 text-xs text-[#0b1c30] mb-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#757682]">Bot Name:</span>
+                    <strong className="text-[#00236f]">{botCheckResult.bot?.firstName}</strong>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#757682]">Bot Username:</span>
+                    <a
+                      href={botCheckResult.botUrl || `https://t.me/${botCheckResult.bot?.username}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[#00236f] font-bold underline flex items-center gap-1"
+                    >
+                      @{botCheckResult.bot?.username}
+                      <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                    </a>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[#757682]">Target Admin:</span>
+                    <span className="font-mono font-bold text-[#004a32]">{ADMIN_TELEGRAM_ID}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-900 mb-3 space-y-1">
+                  <p className="font-bold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">info</span>
+                    Bot Token check in progress or not set
+                  </p>
+                  <p className="text-[11px] text-amber-800 leading-tight">
+                    Add <code className="bg-amber-100 px-1 py-0.5 rounded">TELEGRAM_BOT_TOKEN</code> in Render environment to activate auto-alerts to ID {ADMIN_TELEGRAM_ID}.
+                  </p>
+                </div>
+              )}
+
+              {/* Direct Check Link */}
+              <div className="pt-2 border-t border-[#eff4ff] space-y-2">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-[#757682] font-medium">Direct Check Link:</span>
+                  <a
+                    href="/api/telegram/check"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[#00236f] font-bold hover:underline flex items-center gap-1"
+                  >
+                    /api/telegram/check
+                    <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                  </a>
+                </div>
+
+                <button
+                  onClick={handleCheckBotConnection}
+                  disabled={isCheckingBot}
+                  className="w-full bg-[#eff4ff] hover:bg-[#dce9ff] text-[#00236f] text-xs font-bold py-2 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span className={`material-symbols-outlined text-[15px] ${isCheckingBot ? 'animate-spin' : ''}`}>
+                    {isCheckingBot ? 'refresh' : 'sync'}
+                  </span>
+                  {isCheckingBot ? 'Verifying Telegram Bot...' : 'Check Telegram Bot Connection'}
+                </button>
+              </div>
+            </div>
+
             <div className="bg-white rounded-2xl border border-[#d3e4fe] p-5 shadow-xs">
               <h3 className="font-display font-bold text-sm text-[#00236f] mb-3">Bot Execution Status</h3>
               <div className="space-y-3 text-xs">
@@ -267,6 +394,114 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
                 <span className="text-[10px] text-white/80">Direct Alert Delivery</span>
               </div>
             </div>
+          </div>
+
+          {/* Telegram Bot Live Verification & Check Link Card */}
+          <div className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[22px] text-[#00236f]">link</span>
+                  <h3 className="font-display font-bold text-base text-[#00236f]">
+                    Telegram Bot Connection Check Link
+                  </h3>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      botCheckResult?.connected
+                        ? 'bg-[#85f8c4] text-[#002114]'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {botCheckResult?.connected ? 'CONNECTED 🟢' : 'TOKEN REQUIRED 🟡'}
+                  </span>
+                </div>
+                <p className="text-xs text-[#444651] mt-0.5">
+                  Direct diagnostic URL to verify if your Telegram bot token is active and communicating with Telegram API:
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href="/api/telegram/check"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-[#eff4ff] hover:bg-[#dce9ff] text-[#00236f] text-xs font-bold px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+                  Open Check Link
+                </a>
+                <button
+                  onClick={handleCheckBotConnection}
+                  disabled={isCheckingBot}
+                  className="bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                >
+                  <span className={`material-symbols-outlined text-[16px] ${isCheckingBot ? 'animate-spin' : ''}`}>
+                    {isCheckingBot ? 'refresh' : 'sync'}
+                  </span>
+                  {isCheckingBot ? 'Verifying...' : 'Re-Check Status'}
+                </button>
+              </div>
+            </div>
+
+            {/* Check URL Display Box */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-[#eff4ff] p-3 rounded-xl border border-[#d3e4fe]">
+              <div className="font-mono text-xs text-[#00236f] font-bold select-all overflow-x-auto flex-1 py-1">
+                {typeof window !== 'undefined' ? `${window.location.origin}/api/telegram/check` : '/api/telegram/check'}
+              </div>
+              <button
+                onClick={() =>
+                  copyToClipboard(
+                    typeof window !== 'undefined'
+                      ? `${window.location.origin}/api/telegram/check`
+                      : '/api/telegram/check'
+                  )
+                }
+                className="bg-white hover:bg-white/80 text-[#00236f] border border-[#d3e4fe] text-xs font-bold px-3 py-1.5 rounded-lg flex items-center justify-center gap-1 shrink-0"
+              >
+                <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                Copy Check Link
+              </button>
+            </div>
+
+            {/* Live Status Result View */}
+            {botCheckResult && (
+              <div
+                className={`p-4 rounded-xl text-xs space-y-2 border ${
+                  botCheckResult.connected
+                    ? 'bg-[#85f8c4]/15 border-[#85f8c4] text-[#003120]'
+                    : 'bg-amber-50/70 border-amber-200 text-amber-900'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-bold">
+                    <span className="material-symbols-outlined text-[18px]">
+                      {botCheckResult.connected ? 'check_circle' : 'info'}
+                    </span>
+                    <span>Status: {botCheckResult.status}</span>
+                  </div>
+                  <span className="font-mono text-[10px] opacity-75">
+                    {botCheckResult.checkTime || 'Just now'}
+                  </span>
+                </div>
+                <p className="leading-relaxed">{botCheckResult.message}</p>
+
+                {botCheckResult.connected && botCheckResult.bot && (
+                  <div className="pt-2 border-t border-[#85f8c4]/40 flex flex-wrap items-center gap-4 text-xs font-bold">
+                    <span>Bot: {botCheckResult.bot.firstName}</span>
+                    <a
+                      href={botCheckResult.botUrl || `https://t.me/${botCheckResult.bot.username}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline text-[#004a32] flex items-center gap-1"
+                    >
+                      @{botCheckResult.bot.username}
+                      <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                    </a>
+                    <span>Recipient ID: {ADMIN_TELEGRAM_ID}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Test Telegram Dispatch Card */}
@@ -654,6 +889,43 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
             )}
           </form>
 
+          {/* Sync Real Government Data to Database */}
+          <div className="bg-[#eff4ff] rounded-2xl border border-[#d3e4fe] p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[20px] text-[#00236f]">sync_saved_locally</span>
+              <h3 className="font-display font-bold text-sm text-[#00236f]">
+                Sync Real Official Government Gazette Data
+              </h3>
+            </div>
+            <p className="text-xs text-[#444651] leading-relaxed">
+              Populate your connected Supabase database with real, verified notifications, admit cards, results, and answer keys from UPSC, SSC, Railways (RRB), Defence (NDA/CDS), and Banking (IBPS).
+            </p>
+
+            <button
+              onClick={handleSyncOfficialData}
+              disabled={isSyncingData || !supabaseConfig.isConnected}
+              className="w-full bg-[#003120] hover:bg-[#004a32] disabled:opacity-50 text-white text-xs font-bold py-2.5 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2"
+            >
+              {isSyncingData ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                  Writing Real Records to Supabase...
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-[16px]">cloud_upload</span>
+                  Sync Live Official Government Records to Supabase Now
+                </>
+              )}
+            </button>
+
+            {syncDataMsg && (
+              <div className="p-3 bg-[#85f8c4]/30 text-[#003120] font-bold rounded-xl text-xs text-center border border-[#85f8c4]">
+                {syncDataMsg}
+              </div>
+            )}
+          </div>
+
           <div className="p-4 bg-[#eff4ff] rounded-2xl border border-[#d3e4fe] text-xs space-y-2">
             <h4 className="font-bold text-[#00236f]">How to get these in 1 minute:</h4>
             <ol className="list-decimal pl-4 space-y-1 text-[#444651]">
@@ -778,16 +1050,27 @@ SCRAPING_INTERVAL_HOURS = int(os.getenv("SCRAPING_INTERVAL_HOURS", "1"))`}
               {selectedCodeFile === 'scrapers.py' && `# telegram_bot/scrapers.py - Multi-portal Scraping Engine
 # Includes SSC, UPSC, RRB Railways, IBPS, and State PSCs with BeautifulSoup & Asyncio`}
 
-              {selectedCodeFile === 'sql' && `-- Supabase SQL Schema for Sarkari Alerts
-CREATE TABLE public.sarkari_notifications (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    title TEXT NOT NULL,
-    department TEXT,
-    category TEXT DEFAULT 'Jobs',
-    state TEXT DEFAULT 'All India',
-    url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-);`}
+              {selectedCodeFile === 'sql' && `-- StudyMate Sarkari - Production PostgreSQL / Supabase Schema
+-- 12 Normalized Tables + Active Views + Row-Level Security
+
+-- 1. states (36 States & UTs pre-seeded)
+-- 2. organizations (UPSC, SSC, RRBs, State Commissions)
+-- 3. official_sources (58 Monitored Portals with 60-min interval)
+-- 4. jobs (Sarkari Vacancies & Full Descriptions)
+-- 5. job_vacancies (Post-wise breakup)
+-- 6. job_dates (Milestone timelines)
+-- 7. notifications (Gazette circulars & notices)
+-- 8. admit_cards (Hall tickets & exam slips)
+-- 9. results (Scorecards & merit lists)
+-- 10. answer_keys (Provisional / final response sheets)
+-- 11. latest_updates (Unified dynamic feed)
+-- 12. scraper_logs (Hourly crawl audit telemetry)
+
+-- Views used by Website:
+-- public.active_jobs (with state & department joins)
+-- public.active_latest_updates (with live timestamps)
+
+-- Full executable DDL is available in /telegram_bot/supabase_schema.sql`}
             </pre>
           </div>
         </div>

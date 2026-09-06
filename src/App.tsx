@@ -33,6 +33,9 @@ export function App() {
 
   // Data State
   const [jobs, setJobs] = useState<JobItem[]>(MOCK_JOBS);
+  const [admitCards, setAdmitCards] = useState(MOCK_ADMIT_CARDS);
+  const [results, setResults] = useState(MOCK_RESULTS);
+  const [answerKeys, setAnswerKeys] = useState(MOCK_ANSWER_KEYS);
   const [sources, setSources] = useState<GovernmentSource[]>(MOCK_SOURCES);
   const [botLogs, setBotLogs] = useState<TelegramBotLog[]>(MOCK_BOT_LOGS);
 
@@ -60,13 +63,25 @@ export function App() {
   // Load from Supabase on mount if configured
   useEffect(() => {
     const loadSupabaseData = async () => {
-      const liveJobs = await supabaseService.getJobs();
-      if (liveJobs && liveJobs.length > 0) {
-        setJobs(liveJobs);
-      }
-      const liveSources = supabaseService.getSources();
-      if (liveSources && liveSources.length > 0) {
-        setSources(liveSources);
+      try {
+        const [liveJobs, liveAdmitCards, liveResults, liveKeys, liveSources, liveLogs] =
+          await Promise.all([
+            supabaseService.getJobs(),
+            supabaseService.getAdmitCards(),
+            supabaseService.getResults(),
+            supabaseService.getAnswerKeys(),
+            supabaseService.getSourcesAsync(),
+            supabaseService.getBotLogsAsync(),
+          ]);
+
+        if (liveJobs && liveJobs.length > 0) setJobs(liveJobs);
+        if (liveAdmitCards && liveAdmitCards.length > 0) setAdmitCards(liveAdmitCards);
+        if (liveResults && liveResults.length > 0) setResults(liveResults);
+        if (liveKeys && liveKeys.length > 0) setAnswerKeys(liveKeys);
+        if (liveSources && liveSources.length > 0) setSources(liveSources);
+        if (liveLogs && liveLogs.length > 0) setBotLogs(liveLogs);
+      } catch (err) {
+        console.warn('Failed to load live data from Supabase', err);
       }
     };
     loadSupabaseData();
@@ -165,9 +180,9 @@ export function App() {
         {activeTab === 'home' && (
           <HomeView
             jobs={jobs}
-            admitCards={MOCK_ADMIT_CARDS}
-            results={MOCK_RESULTS}
-            answerKeys={MOCK_ANSWER_KEYS}
+            admitCards={admitCards}
+            results={results}
+            answerKeys={answerKeys}
             onSelectJob={handleSelectJob}
             onNavigate={handleNavigate}
           />
@@ -195,15 +210,15 @@ export function App() {
         )}
 
         {activeTab === 'admit-card' && (
-          <AdmitCardView admitCards={MOCK_ADMIT_CARDS} onNavigate={handleNavigate} />
+          <AdmitCardView admitCards={admitCards} onNavigate={handleNavigate} />
         )}
 
         {activeTab === 'results' && (
-          <ResultsView results={MOCK_RESULTS} onNavigate={handleNavigate} />
+          <ResultsView results={results} onNavigate={handleNavigate} />
         )}
 
         {activeTab === 'answer-key' && (
-          <AnswerKeyView answerKeys={MOCK_ANSWER_KEYS} onNavigate={handleNavigate} />
+          <AnswerKeyView answerKeys={answerKeys} onNavigate={handleNavigate} />
         )}
 
         {activeTab === 'state-wise' && (

@@ -41,7 +41,75 @@ async function startServer() {
     });
   });
 
-  // 3. Test Telegram Alert endpoint (dispatches message directly to Telegram ID: 5165363865)
+  // 3. Check Telegram Bot Connection Status & Diagnostics
+  app.get(['/api/telegram/check', '/api/telegram/status'], async (req, res) => {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const adminChatId = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '5165363865';
+
+    if (!token) {
+      return res.status(200).json({
+        connected: false,
+        status: 'DISCONNECTED',
+        tokenConfigured: false,
+        message: 'TELEGRAM_BOT_TOKEN is missing in environment variables. Bot is not yet connected.',
+        adminTelegramId: adminChatId,
+        instructions: {
+          step1: 'Open Telegram and message @BotFather',
+          step2: 'Send /newbot to create your bot and get the HTTP API token',
+          step3: 'Set TELEGRAM_BOT_TOKEN in Render or container environment',
+          step4: 'Reload or re-test this check link',
+        },
+        checkTime: new Date().toISOString(),
+      });
+    }
+
+    try {
+      const tgResponse = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const data = await tgResponse.json();
+
+      if (tgResponse.ok && data.ok) {
+        const bot = data.result;
+        return res.status(200).json({
+          connected: true,
+          status: 'CONNECTED',
+          tokenConfigured: true,
+          message: `✅ Telegram Bot @${bot.username} is ACTIVE and CONNECTED successfully!`,
+          bot: {
+            id: bot.id,
+            username: bot.username,
+            firstName: bot.first_name,
+            isBot: bot.is_bot,
+            canJoinGroups: bot.can_join_groups,
+            supportsInlineQueries: bot.supports_inline_queries,
+          },
+          botUrl: `https://t.me/${bot.username}`,
+          adminTelegramId: adminChatId,
+          testAlertEndpoint: '/api/telegram/test-notify',
+          checkTime: new Date().toISOString(),
+        });
+      } else {
+        return res.status(200).json({
+          connected: false,
+          status: 'INVALID_TOKEN',
+          tokenConfigured: true,
+          message: `Telegram API error: ${data.description || 'Token rejected by Telegram.'}`,
+          adminTelegramId: adminChatId,
+          checkTime: new Date().toISOString(),
+        });
+      }
+    } catch (err: any) {
+      return res.status(500).json({
+        connected: false,
+        status: 'NETWORK_ERROR',
+        tokenConfigured: true,
+        message: err.message || 'Failed to reach Telegram API servers',
+        adminTelegramId: adminChatId,
+        checkTime: new Date().toISOString(),
+      });
+    }
+  });
+
+  // 4. Test Telegram Alert endpoint (dispatches message directly to Telegram ID: 5165363865)
   app.post('/api/telegram/test-notify', async (req, res) => {
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '5165363865';

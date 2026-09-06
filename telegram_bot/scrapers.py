@@ -99,6 +99,7 @@ async def scrape_portal(session: aiohttp.ClientSession, source: dict) -> list:
                     "url": full_url,
                     "vacancies": vacancies,
                     "source_site": source.get("name"),
+                    "source_url": source.get("url"),
                 }
                 items.append(item)
 
