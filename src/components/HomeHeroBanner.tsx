@@ -1,5 +1,4 @@
 import React from 'react';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface HomeHeroBannerProps {
   onNavigate: (tab: string, jobId?: string) => void;
@@ -126,12 +125,22 @@ export const HomeHeroBanner: React.FC<HomeHeroBannerProps> = ({
                 India's premier real-time educational gateway for UPSC, SSC, Banking, Railways, State PSCs, Defence notifications, Hall Tickets, Answer Keys, and Exam Results.
               </p>
 
-              {/* Action Buttons Row */}
+              {/* Action Buttons Row: Quick Actions */}
               <div className="mt-5 flex flex-wrap items-center justify-center lg:justify-start gap-3">
-                <PWAInstallButton variant="banner" />
+                <button
+                  onClick={() => onNavigate('candidate-tools')}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#00236f] hover:bg-[#00174c] text-white text-xs md:text-sm font-bold shadow-md transition-all hover:scale-105 border border-[#38bdf8]/40"
+                  title="Age Calculator, Photo Resizer, Typing Test, Normalization"
+                >
+                  <span className="material-symbols-outlined text-[19px] text-[#38bdf8]">
+                    construction
+                  </span>
+                  <span>Candidate Tools &amp; Calculator</span>
+                </button>
+
                 <button
                   onClick={() => onNavigate('latest-jobs')}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-[#101b2c] hover:bg-[#eff4ff] dark:hover:bg-[#1e293b] text-[#00236f] dark:text-[#93c5fd] text-xs md:text-sm font-bold border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs transition-all hover:scale-105"
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-[#101b2c] hover:bg-[#eff4ff] dark:hover:bg-[#1e293b] text-[#00236f] dark:text-[#93c5fd] text-xs md:text-sm font-bold border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs transition-all hover:scale-105"
                 >
                   <span className="material-symbols-outlined text-[18px]">explore</span>
                   <span>Browse 180+ Active Jobs</span>

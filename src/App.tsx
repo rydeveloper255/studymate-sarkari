@@ -14,6 +14,7 @@ import { CandidateToolsView } from './components/CandidateToolsView';
 import { TelegramBotDashboard } from './components/TelegramBotDashboard';
 import { SavedJobsModal } from './components/SavedJobsModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { PWAInstallPopup } from './components/PWAInstallPopup';
 
 import {
   MOCK_JOBS,
@@ -27,10 +28,65 @@ import { JobItem, GovernmentSource, TelegramBotLog } from './types';
 import { supabaseService } from './services/supabaseService';
 
 export function App() {
-  // Navigation State
-  const [activeTab, setActiveTab] = useState<string>('home');
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  // Initialize Navigation State from URL hash or default
+  const getInitialRoute = (): { tab: string; jobId: string | null } => {
+    try {
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash) {
+        const [tabPart, queryPart] = hash.split('?');
+        const params = new URLSearchParams(queryPart || '');
+        const jId = params.get('id');
+        return { tab: tabPart || 'home', jobId: jId || null };
+      }
+    } catch {
+      // ignore
+    }
+    return { tab: 'home', jobId: null };
+  };
+
+  const initialRoute = getInitialRoute();
+  const [activeTab, setActiveTab] = useState<string>(initialRoute.tab);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(initialRoute.jobId);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Admin Mode State (Unlocked by secret code 'adminY n' or 'adminyn')
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('studymate_admin_unlocked') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Browser History & Back Navigation Synchronization
+  useEffect(() => {
+    // Set initial state in history
+    const initialHash = '#' + activeTab + (selectedJobId ? `?id=${selectedJobId}` : '');
+    window.history.replaceState({ tab: activeTab, jobId: selectedJobId }, '', initialHash);
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state && event.state.tab) {
+        setActiveTab(event.state.tab);
+        setSelectedJobId(event.state.jobId || null);
+      } else {
+        const hash = window.location.hash.replace(/^#/, '');
+        if (hash) {
+          const [tabPart, queryPart] = hash.split('?');
+          const params = new URLSearchParams(queryPart || '');
+          const jId = params.get('id');
+          setActiveTab(tabPart || 'home');
+          setSelectedJobId(jId || null);
+        } else {
+          setActiveTab('home');
+          setSelectedJobId(null);
+        }
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Data State
   const [jobs, setJobs] = useState<JobItem[]>(MOCK_JOBS);
@@ -61,6 +117,36 @@ export function App() {
     }
   }, [bookmarkedJobIds]);
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  const handleUnlockAdmin = () => {
+    setIsAdmin(true);
+    try {
+      localStorage.setItem('studymate_admin_unlocked', 'true');
+    } catch (e) {
+      console.error(e);
+    }
+    showToast('👑 Admin Mode Unlocked! Telegram Bot & Scraper Control Active');
+    setActiveTab('telegram-bot');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleExitAdmin = () => {
+    setIsAdmin(false);
+    try {
+      localStorage.removeItem('studymate_admin_unlocked');
+    } catch (e) {
+      console.error(e);
+    }
+    showToast('🔒 Admin Mode Locked. Telegram Bot panel hidden from public.');
+    if (activeTab === 'telegram-bot') {
+      setActiveTab('home');
+    }
+  };
+
   // Load from Supabase on mount if configured
   useEffect(() => {
     const loadSupabaseData = async () => {
@@ -88,11 +174,6 @@ export function App() {
     loadSupabaseData();
   }, []);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
   const handleToggleBookmark = (jobId: string) => {
     setBookmarkedJobIds((prev) => {
       const exists = prev.includes(jobId);
@@ -106,12 +187,17 @@ export function App() {
     });
   };
 
-  const handleNavigate = (tab: string, jobId?: string) => {
+  const handleNavigate = (tab: string, jobId?: string, pushHistory: boolean = true) => {
     setActiveTab(tab);
     if (jobId) {
       setSelectedJobId(jobId);
     } else if (tab !== 'job-detail') {
       setSelectedJobId(null);
+    }
+
+    if (pushHistory) {
+      const url = '#' + tab + (jobId ? `?id=${jobId}` : '');
+      window.history.pushState({ tab, jobId: jobId || null }, '', url);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -119,10 +205,25 @@ export function App() {
   const handleSelectJob = (jobId: string) => {
     setSelectedJobId(jobId);
     setActiveTab('job-detail');
+    const url = '#job-detail?id=' + jobId;
+    window.history.pushState({ tab: 'job-detail', jobId }, '', url);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      handleNavigate('home');
+    }
+  };
+
   const handleSearchSubmit = (query: string) => {
+    const trimmed = query.trim();
+    if (/^adminy\s*n$/i.test(trimmed) || trimmed.toLowerCase() === 'adminyn') {
+      handleUnlockAdmin();
+      return;
+    }
     setSearchQuery(query);
     setActiveTab('latest-jobs');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -158,7 +259,7 @@ export function App() {
   const savedJobsList = jobs.filter((j) => bookmarkedJobIds.includes(j.id));
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f9ff] dark:bg-[#080e18] text-[#0b1c30] dark:text-[#f1f5f9] antialiased selection:bg-[#00236f] selection:text-white transition-colors duration-200">
+    <div className="min-h-screen w-full flex flex-col bg-[#f7f9ff] dark:bg-[#080e18] text-[#0b1c30] dark:text-[#f1f5f9] antialiased selection:bg-[#00236f] selection:text-white transition-colors duration-200 overflow-x-hidden">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#00236f] text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-xl border border-white/20 flex items-center gap-2 animate-bounce">
@@ -170,6 +271,9 @@ export function App() {
       {/* PWA Offline Network Indicator */}
       <OfflineIndicator />
 
+      {/* Delayed 6-7 second PWA Install Popup */}
+      <PWAInstallPopup />
+
       {/* Global Header */}
       <Header
         activeTab={activeTab}
@@ -177,6 +281,8 @@ export function App() {
         savedCount={bookmarkedJobIds.length}
         onOpenSavedModal={() => setIsSavedModalOpen(true)}
         onSearchSubmit={handleSearchSubmit}
+        isAdmin={isAdmin}
+        onUnlockAdmin={handleUnlockAdmin}
       />
 
       {/* Main Container */}
@@ -189,6 +295,8 @@ export function App() {
             answerKeys={answerKeys}
             onSelectJob={handleSelectJob}
             onNavigate={handleNavigate}
+            onSearch={handleSearchSubmit}
+            onUnlockAdmin={handleUnlockAdmin}
           />
         )}
 
@@ -208,7 +316,7 @@ export function App() {
             job={currentJob}
             isSaved={bookmarkedJobIds.includes(currentJob.id)}
             onToggleBookmark={handleToggleBookmark}
-            onBack={() => handleNavigate('latest-jobs')}
+            onBack={handleGoBack}
             onNavigate={handleNavigate}
           />
         )}
@@ -245,10 +353,15 @@ export function App() {
           <TelegramBotDashboard
             sources={sources}
             botLogs={botLogs}
+            jobs={jobs}
+            admitCards={admitCards}
+            results={results}
+            answerKeys={answerKeys}
             onAddSource={handleAddSource}
             onToggleSource={handleToggleSource}
             onSimulateScrape={handleSimulateScrape}
             onNavigate={handleNavigate}
+            onExitAdmin={handleExitAdmin}
           />
         )}
       </main>
@@ -263,7 +376,7 @@ export function App() {
       />
 
       {/* Global Footer */}
-      <Footer onNavigate={handleNavigate} />
+      <Footer onNavigate={handleNavigate} isAdmin={isAdmin} />
     </div>
   );
 }

@@ -1,394 +1,233 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
+import { PhotoDateAdder } from './candidate-tools/PhotoDateAdder';
+import { AgeRelaxationCalculator } from './candidate-tools/AgeRelaxationCalculator';
+import { NegativeMarkingCalculator } from './candidate-tools/NegativeMarkingCalculator';
+import { ApplicationFeeCalculator } from './candidate-tools/ApplicationFeeCalculator';
+import { OmrSimulator } from './candidate-tools/OmrSimulator';
+import { BilingualTypingTester } from './candidate-tools/BilingualTypingTester';
+import { SyllabusTracker } from './candidate-tools/SyllabusTracker';
+import { DocumentVerificationChecker } from './candidate-tools/DocumentVerificationChecker';
+import { ExamTravelPlanner } from './candidate-tools/ExamTravelPlanner';
+import { ZonePreferenceComparator } from './candidate-tools/ZonePreferenceComparator';
+import { PhotoResizer } from './candidate-tools/PhotoResizer';
+import { CbtMarksNormalizer } from './candidate-tools/CbtMarksNormalizer';
 
 export interface CandidateToolsViewProps {
   onNavigate: (tab: string) => void;
 }
 
+interface ToolDefinition {
+  id: string;
+  name: string;
+  category: 'form' | 'exam' | 'prep';
+  icon: string;
+  tagline: string;
+}
+
+const TOOLS: ToolDefinition[] = [
+  { id: 'photo-date', name: 'Photo Name & Date Adder', category: 'form', icon: 'badge', tagline: 'Add DOP and Candidate name on photo strip' },
+  { id: 'age-eligibility', name: 'Age Relaxation & Eligibility', category: 'prep', icon: 'cake', tagline: 'OBC/SC/ST/PwD cutoff age calculator' },
+  { id: 'negative-marking', name: 'Negative Marking & Raw Score', category: 'exam', icon: 'calculate', tagline: '1/3rd, 1/4th penalty & accuracy score' },
+  { id: 'fee-calculator', name: 'Application Fee & Exemption', category: 'form', icon: 'payments', tagline: 'Category & gender fee waiver breakdown' },
+  { id: 'omr-simulator', name: 'OMR Practice Simulator', category: 'exam', icon: 'radio_button_checked', tagline: 'Live bubble darkening test & printable A4 OMR' },
+  { id: 'typing-test', name: 'Bilingual Typing Speed Test', category: 'prep', icon: 'keyboard', tagline: 'English & Hindi (Mangal/Kruti Dev) WPM tester' },
+  { id: 'syllabus-tracker', name: 'Syllabus Topic Checklist', category: 'prep', icon: 'checklist', tagline: 'Chapter-by-chapter revision & completion bar' },
+  { id: 'dv-checker', name: 'DV & Certificate Validity', category: 'form', icon: 'verified_user', tagline: 'EWS/OBC-NCL rules & 11-point dossier list' },
+  { id: 'travel-planner', name: 'Center Distance & Travel Planner', category: 'prep', icon: 'directions_transit', tagline: 'Route ETA, gate closure timing & travel kit' },
+  { id: 'zone-preferences', name: 'Zone & Vacancy Comparator', category: 'prep', icon: 'reorder', tagline: 'RRB/SSC State preferences & vacancy ranking' },
+  { id: 'photo-resizer', name: 'Photo & Signature Resizer', category: 'form', icon: 'crop', tagline: 'Exact px and 10-20KB / 20-50KB compressor' },
+  { id: 'normalization', name: 'CBT Marks Normalizer', category: 'exam', icon: 'functions', tagline: 'Multi-shift percentile standard normalizer' },
+];
+
 export const CandidateToolsView: React.FC<CandidateToolsViewProps> = ({ onNavigate }) => {
-  const [activeTool, setActiveTool] = useState<'age' | 'resizer' | 'normalization'>('age');
+  const [activeToolId, setActiveToolId] = useState<string>('photo-date');
+  const [categoryFilter, setCategoryFilter] = useState<'all' | 'form' | 'exam' | 'prep'>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // 1. Age Calculator State
-  const [dob, setDob] = useState('2000-01-01');
-  const [crucialDate, setCrucialDate] = useState('2025-08-01');
-  const [category, setCategory] = useState('UR');
-  const [minAge, setMinAge] = useState(18);
-  const [maxAge, setMaxAge] = useState(30);
-  const [ageResult, setAgeResult] = useState<string | null>(null);
+  const filteredTools = TOOLS.filter((t) => {
+    const matchesCat = categoryFilter === 'all' || t.category === categoryFilter;
+    const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          t.tagline.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCat && matchesSearch;
+  });
 
-  const calculateAge = () => {
-    if (!dob || !crucialDate) return;
-    const d1 = new Date(dob);
-    const d2 = new Date(crucialDate);
-
-    let years = d2.getFullYear() - d1.getFullYear();
-    let months = d2.getMonth() - d1.getMonth();
-    let days = d2.getDate() - d1.getDate();
-
-    if (days < 0) {
-      months--;
-      days += 30;
+  const renderActiveTool = () => {
+    switch (activeToolId) {
+      case 'photo-date':
+        return <PhotoDateAdder />;
+      case 'age-eligibility':
+        return <AgeRelaxationCalculator />;
+      case 'negative-marking':
+        return <NegativeMarkingCalculator />;
+      case 'fee-calculator':
+        return <ApplicationFeeCalculator />;
+      case 'omr-simulator':
+        return <OmrSimulator />;
+      case 'typing-test':
+        return <BilingualTypingTester />;
+      case 'syllabus-tracker':
+        return <SyllabusTracker />;
+      case 'dv-checker':
+        return <DocumentVerificationChecker />;
+      case 'travel-planner':
+        return <ExamTravelPlanner />;
+      case 'zone-preferences':
+        return <ZonePreferenceComparator />;
+      case 'photo-resizer':
+        return <PhotoResizer />;
+      case 'normalization':
+        return <CbtMarksNormalizer />;
+      default:
+        return <PhotoDateAdder />;
     }
-    if (months < 0) {
-      years--;
-      months += 12;
-    }
-
-    const relaxation = category === 'SC' || category === 'ST' ? 5 : category === 'OBC' ? 3 : category === 'PwD' ? 10 : 0;
-    const effectiveMax = maxAge + relaxation;
-    const isEligible = years >= minAge && (years < effectiveMax || (years === effectiveMax && months === 0 && days === 0));
-
-    setAgeResult(
-      `Your Age on ${crucialDate}: ${years} Years, ${months} Months, ${days} Days. Effective Age Limit for ${category}: ${minAge} to ${effectiveMax} Years. Status: ${
-        isEligible ? '✅ ELIGIBLE' : '❌ NOT ELIGIBLE (Age Exceeded / Underage)'
-      }`
-    );
-  };
-
-  // 2. Photo & Signature Resizer State
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [resizerType, setResizerType] = useState<'photo' | 'signature'>('photo');
-  const [targetWidth, setTargetWidth] = useState(200);
-  const [targetHeight, setTargetHeight] = useState(230);
-  const [resizedImage, setResizedImage] = useState<string | null>(null);
-  const [fileSizeKb, setFileSizeKb] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setSelectedFile(event.target?.result as string);
-      processImage(event.target?.result as string, targetWidth, targetHeight);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const processImage = (dataUrl: string, w: number, h: number) => {
-    const img = new Image();
-    img.src = dataUrl;
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        const output = canvas.toDataURL('image/jpeg', 0.85);
-        setResizedImage(output);
-        // Estimate KB
-        const head = 'data:image/jpeg;base64,';
-        const size = Math.round(((output.length - head.length) * 3) / 4 / 1024);
-        setFileSizeKb(size);
-      }
-    };
-  };
-
-  const handleResizerPreset = (type: 'photo' | 'signature') => {
-    setResizerType(type);
-    const w = type === 'photo' ? 200 : 140;
-    const h = type === 'photo' ? 230 : 60;
-    setTargetWidth(w);
-    setTargetHeight(h);
-    if (selectedFile) {
-      processImage(selectedFile, w, h);
-    }
-  };
-
-  // 3. Normalization Calculator State
-  const [rawScore, setRawScore] = useState(135);
-  const [shiftMean, setShiftMean] = useState(115);
-  const [shiftStdDev, setShiftStdDev] = useState(18);
-  const [baseMean, setBaseMean] = useState(120);
-  const [baseStdDev, setBaseStdDev] = useState(20);
-  const [normalizedScore, setNormalizedScore] = useState<number | null>(null);
-
-  const calculateNormalized = () => {
-    // Formula: ( (Raw - ShiftMean) / ShiftStdDev ) * BaseStdDev + BaseMean
-    const z = (rawScore - shiftMean) / shiftStdDev;
-    const norm = z * baseStdDev + baseMean;
-    setNormalizedScore(Math.round(norm * 1000) / 1000);
   };
 
   return (
-    <div className="space-y-6 pb-12 font-sans">
+    <div className="space-y-6 pb-12 font-sans w-full max-w-7xl mx-auto">
       {/* 1. Breadcrumb */}
-      <nav className="flex items-center gap-2 text-xs text-[#757682]">
-        <button onClick={() => onNavigate('home')} className="hover:text-[#00236f] flex items-center gap-1">
+      <nav className="flex items-center gap-2 text-xs text-[#757682] dark:text-[#94a3b8]">
+        <button
+          onClick={() => onNavigate('home')}
+          className="hover:text-[#00236f] dark:hover:text-white flex items-center gap-1 cursor-pointer"
+        >
           <span className="material-symbols-outlined text-[14px]">home</span> Home
         </button>
         <span>/</span>
-        <span className="text-[#0b1c30] font-bold">Candidate Self-Service Toolkit</span>
+        <span className="text-[#0b1c30] dark:text-white font-bold">12 High-Utility Candidate Tools</span>
       </nav>
 
-      {/* 2. Banner */}
-      <div className="bg-gradient-to-r from-[#00236f] via-[#1e3a8a] to-[#003120] rounded-2xl p-6 md:p-8 text-white shadow-lg">
-        <span className="inline-block bg-[#85f8c4] text-[#002114] text-[11px] font-extrabold px-3 py-0.5 rounded-full uppercase tracking-wider mb-2">
-          100% Free Candidate Tools
-        </span>
-        <h1 className="font-display font-black text-2xl sm:text-3xl md:text-4xl text-white tracking-tight">
-          Aspirant Utility & Application Toolkit
-        </h1>
-        <p className="text-white/80 text-xs md:text-sm mt-2 max-w-2xl">
-          Accurate age eligibility calculators, instant photo & signature dimensions resizers with 10-20KB compression, and multi-shift CBT marks normalizers.
-        </p>
-      </div>
-
-      {/* 3. Tool Tabs */}
-      <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-[#d3e4fe] shadow-xs">
-        <button
-          onClick={() => setActiveTool('age')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-            activeTool === 'age' ? 'bg-[#00236f] text-white shadow-sm' : 'hover:bg-[#eff4ff] text-[#444651]'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[20px]">cake</span>
-          Age Eligibility Calculator
-        </button>
-        <button
-          onClick={() => setActiveTool('resizer')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-            activeTool === 'resizer' ? 'bg-[#00236f] text-white shadow-sm' : 'hover:bg-[#eff4ff] text-[#444651]'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[20px]">crop</span>
-          Photo & Signature Resizer
-        </button>
-        <button
-          onClick={() => setActiveTool('normalization')}
-          className={`flex-1 py-3 px-4 rounded-xl text-xs md:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
-            activeTool === 'normalization' ? 'bg-[#00236f] text-white shadow-sm' : 'hover:bg-[#eff4ff] text-[#444651]'
-          }`}
-        >
-          <span className="material-symbols-outlined text-[20px]">functions</span>
-          CBT Marks Normalizer
-        </button>
-      </div>
-
-      {/* 4. Tool 1: Age Calculator */}
-      {activeTool === 'age' && (
-        <div className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs max-w-2xl mx-auto space-y-4">
-          <h2 className="font-display font-extrabold text-lg text-[#00236f] flex items-center gap-2">
-            <span className="material-symbols-outlined text-[22px]">calculate</span>
-            Official Age Eligibility Calculator
-          </h2>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-            <div>
-              <label className="font-bold text-[#757682] uppercase block mb-1">Your Date of Birth</label>
-              <input
-                type="date"
-                value={dob}
-                onChange={(e) => setDob(e.target.value)}
-                className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30] focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-[#757682] uppercase block mb-1">Crucial Cutoff Date</label>
-              <input
-                type="date"
-                value={crucialDate}
-                onChange={(e) => setCrucialDate(e.target.value)}
-                className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30] focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-[#757682] uppercase block mb-1">Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30] focus:outline-none cursor-pointer"
-              >
-                <option value="UR">UR / General (No relaxation)</option>
-                <option value="OBC">OBC (3 Years relaxation)</option>
-                <option value="SC">SC (5 Years relaxation)</option>
-                <option value="ST">ST (5 Years relaxation)</option>
-                <option value="PwD">PwBD (10 Years relaxation)</option>
-              </select>
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="font-bold text-[#757682] uppercase block mb-1">Min Age</label>
-                <input
-                  type="number"
-                  value={minAge}
-                  onChange={(e) => setMinAge(Number(e.target.value))}
-                  className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30] focus:outline-none"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="font-bold text-[#757682] uppercase block mb-1">Max Age</label>
-                <input
-                  type="number"
-                  value={maxAge}
-                  onChange={(e) => setMaxAge(Number(e.target.value))}
-                  className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30] focus:outline-none"
-                />
-              </div>
-            </div>
+      {/* 2. Top Banner */}
+      <div className="bg-gradient-to-r from-[#00236f] via-[#1e3a8a] to-[#003120] rounded-2xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="bg-[#85f8c4] text-[#002114] text-[11px] font-extrabold px-3 py-0.5 rounded-full uppercase tracking-wider">
+              100% Free Aspirant Toolkit
+            </span>
+            <span className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-white/20">
+              12 Active Utilities
+            </span>
           </div>
 
-          <button
-            onClick={calculateAge}
-            className="w-full bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold py-3 rounded-xl shadow-xs transition-colors"
-          >
-            Calculate Exact Age & Eligibility
-          </button>
-
-          {ageResult && (
-            <div className="p-4 bg-[#eff4ff] rounded-xl border border-[#d3e4fe] text-xs font-bold text-[#00236f] text-center leading-relaxed">
-              {ageResult}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 5. Tool 2: Photo & Signature Resizer */}
-      {activeTool === 'resizer' && (
-        <div className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs max-w-3xl mx-auto space-y-4">
-          <h2 className="font-display font-extrabold text-lg text-[#00236f] flex items-center gap-2">
-            <span className="material-symbols-outlined text-[22px]">crop</span>
-            SSC / UPSC Photo & Signature Resizer (Exact Pixel & KB)
-          </h2>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleResizerPreset('photo')}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-                resizerType === 'photo' ? 'bg-[#00236f] text-white' : 'bg-[#eff4ff] text-[#444651]'
-              }`}
-            >
-              Passport Photo Preset (200 x 230 px, 20-50 KB)
-            </button>
-            <button
-              onClick={() => handleResizerPreset('signature')}
-              className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${
-                resizerType === 'signature' ? 'bg-[#00236f] text-white' : 'bg-[#eff4ff] text-[#444651]'
-              }`}
-            >
-              Signature Preset (140 x 60 px, 10-20 KB)
-            </button>
-          </div>
-
-          <div
-            onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-[#d3e4fe] hover:border-[#00236f] rounded-2xl p-8 text-center cursor-pointer transition-colors bg-[#eff4ff]/40"
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <span className="material-symbols-outlined text-4xl text-[#00236f] mb-2">upload_file</span>
-            <p className="font-bold text-xs text-[#0b1c30]">Click to select or drag & drop JPG / PNG file</p>
-            <p className="text-[11px] text-[#757682] mt-1">Processed securely 100% inside your browser.</p>
-          </div>
-
-          {resizedImage && (
-            <div className="p-4 bg-[#eff4ff] rounded-2xl border border-[#d3e4fe] flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <img
-                  src={resizedImage}
-                  alt="Resized Preview"
-                  className="border border-[#757682] bg-white rounded shadow-xs"
-                  style={{ width: `${targetWidth}px`, height: `${targetHeight}px` }}
-                />
-                <div className="text-xs">
-                  <span className="font-bold text-[#00236f] block">
-                    Dimensions: {targetWidth} x {targetHeight} px
-                  </span>
-                  <span className="text-[#004a32] font-bold block">
-                    Estimated Size: ~{fileSizeKb} KB (Compliant)
-                  </span>
-                </div>
-              </div>
-
-              <a
-                href={resizedImage}
-                download={resizerType === 'photo' ? 'passport_photo.jpg' : 'signature.jpg'}
-                className="bg-[#003120] hover:bg-[#004a32] text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
-              >
-                <span>Download Resized JPG</span>
-                <span className="material-symbols-outlined text-[16px]">download</span>
-              </a>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 6. Tool 3: Normalization Calculator */}
-      {activeTool === 'normalization' && (
-        <div className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs max-w-2xl mx-auto space-y-4">
-          <h2 className="font-display font-extrabold text-lg text-[#00236f] flex items-center gap-2">
-            <span className="material-symbols-outlined text-[22px]">functions</span>
-            Multi-Shift CBT Marks Normalization Calculator
-          </h2>
-          <p className="text-xs text-[#444651]">
-            Uses standard Indian Government recruiting commission normalization algorithm.
+          <h1 className="font-display font-black text-2xl sm:text-3xl md:text-4xl text-white tracking-tight">
+            Official Candidate Tools &amp; Self-Service Suite
+          </h1>
+          <p className="text-white/80 text-xs md:text-sm mt-2 max-w-2xl leading-relaxed">
+            From automated photo name/date stamping and category age relaxation to OMR simulators, typing speed tests, and syllabus progress tracking.
           </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-            <div>
-              <label className="font-bold text-[#757682] uppercase block mb-1">Your Raw Score</label>
-              <input
-                type="number"
-                value={rawScore}
-                onChange={(e) => setRawScore(Number(e.target.value))}
-                className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30]"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-[#757682] uppercase block mb-1">Your Shift Average Marks</label>
-              <input
-                type="number"
-                value={shiftMean}
-                onChange={(e) => setShiftMean(Number(e.target.value))}
-                className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30]"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-[#757682] uppercase block mb-1">Your Shift Std. Deviation</label>
-              <input
-                type="number"
-                value={shiftStdDev}
-                onChange={(e) => setShiftStdDev(Number(e.target.value))}
-                className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30]"
-              />
-            </div>
-            <div>
-              <label className="font-bold text-[#757682] uppercase block mb-1">Base Benchmark Average</label>
-              <input
-                type="number"
-                value={baseMean}
-                onChange={(e) => setBaseMean(Number(e.target.value))}
-                className="w-full bg-[#eff4ff] p-2.5 rounded-xl font-bold text-[#0b1c30]"
-              />
-            </div>
-          </div>
-
-          <button
-            onClick={calculateNormalized}
-            className="w-full bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold py-3 rounded-xl shadow-xs transition-colors"
-          >
-            Calculate Estimated Normalized Marks
-          </button>
-
-          {normalizedScore !== null && (
-            <div className="p-4 bg-[#85f8c4]/20 rounded-xl border border-[#85f8c4] text-center">
-              <span className="text-xs font-bold text-[#003120] uppercase block">Normalized Final Score</span>
-              <span className="font-display font-black text-3xl text-[#004a32] block mt-1">
-                {normalizedScore} Marks
-              </span>
-            </div>
-          )}
         </div>
-      )}
+      </div>
+
+      {/* 3. Category Filter & Search Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-[#070e1e] p-2.5 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs">
+        {/* Category Pills */}
+        <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
+          <button
+            onClick={() => setCategoryFilter('all')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              categoryFilter === 'all'
+                ? 'bg-[#00236f] text-white shadow-xs'
+                : 'text-[#475569] dark:text-[#94a3b8] hover:bg-[#eff4ff] dark:hover:bg-[#0c182c]'
+            }`}
+          >
+            All Tools (12)
+          </button>
+          <button
+            onClick={() => setCategoryFilter('form')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              categoryFilter === 'form'
+                ? 'bg-[#00236f] text-white shadow-xs'
+                : 'text-[#475569] dark:text-[#94a3b8] hover:bg-[#eff4ff] dark:hover:bg-[#0c182c]'
+            }`}
+          >
+            Form Filling &amp; Docs
+          </button>
+          <button
+            onClick={() => setCategoryFilter('exam')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              categoryFilter === 'exam'
+                ? 'bg-[#00236f] text-white shadow-xs'
+                : 'text-[#475569] dark:text-[#94a3b8] hover:bg-[#eff4ff] dark:hover:bg-[#0c182c]'
+            }`}
+          >
+            Exam &amp; Scoring
+          </button>
+          <button
+            onClick={() => setCategoryFilter('prep')}
+            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              categoryFilter === 'prep'
+                ? 'bg-[#00236f] text-white shadow-xs'
+                : 'text-[#475569] dark:text-[#94a3b8] hover:bg-[#eff4ff] dark:hover:bg-[#0c182c]'
+            }`}
+          >
+            Preparation &amp; Travel
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="relative w-full sm:w-64">
+          <span className="material-symbols-outlined absolute left-3 top-2.5 text-[#94a3b8] text-[18px]">
+            search
+          </span>
+          <input
+            type="text"
+            placeholder="Search candidate tool..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-[#f8fafc] dark:bg-[#0c182c] border border-[#cbd5e1] dark:border-[#1e324c] rounded-xl text-xs text-[#0b1c30] dark:text-white placeholder:text-[#94a3b8] focus:outline-none focus:border-[#00236f]"
+          />
+        </div>
+      </div>
+
+      {/* 4. Horizontal Scrollable / Grid of Tools */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+        {filteredTools.map((tool) => {
+          const isSelected = activeToolId === tool.id;
+          return (
+            <button
+              key={tool.id}
+              onClick={() => {
+                setActiveToolId(tool.id);
+                window.scrollTo({ top: 320, behavior: 'smooth' });
+              }}
+              className={`p-3 rounded-2xl text-left border transition-all flex flex-col justify-between cursor-pointer group ${
+                isSelected
+                  ? 'bg-[#00236f] dark:bg-[#0c1f3d] border-[#00236f] dark:border-[#38bdf8] text-white shadow-md scale-[1.02]'
+                  : 'bg-white dark:bg-[#070e1e] border-[#e2e8f0] dark:border-[#1e324c] hover:border-[#00236f]/50 text-[#0b1c30] dark:text-[#f1f5f9] hover:bg-[#eff4ff]/50'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                  isSelected ? 'bg-white/20 text-[#85f8c4]' : 'bg-[#eff4ff] dark:bg-[#0c182c] text-[#00236f] dark:text-[#38bdf8]'
+                }`}>
+                  <span className="material-symbols-outlined text-[20px]">{tool.icon}</span>
+                </div>
+                {isSelected && (
+                  <span className="material-symbols-outlined text-[16px] text-[#85f8c4]">check_circle</span>
+                )}
+              </div>
+
+              <div>
+                <span className={`text-xs font-bold leading-tight line-clamp-2 ${
+                  isSelected ? 'text-white' : 'text-[#0b1c30] dark:text-white'
+                }`}>
+                  {tool.name}
+                </span>
+                <span className={`text-[10px] line-clamp-1 mt-0.5 ${
+                  isSelected ? 'text-white/70' : 'text-[#64748b] dark:text-[#94a3b8]'
+                }`}>
+                  {tool.tagline}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 5. Render Selected Tool */}
+      <div className="mt-4">
+        {renderActiveTool()}
+      </div>
     </div>
   );
 };

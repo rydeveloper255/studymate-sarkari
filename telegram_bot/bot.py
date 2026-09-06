@@ -57,6 +57,11 @@ from config import (
     TELEGRAM_ADMIN_ID,
     TELEGRAM_CHAT_ID,
     TELEGRAM_CHANNEL_ID,
+    WHATSAPP_CHANNEL_URL,
+    WHATSAPP_CHANNEL_ID,
+    GREEN_API_INSTANCE_ID,
+    GREEN_API_API_TOKEN,
+    WEBSITE_DOMAIN,
     SUPABASE_URL,
     SUPABASE_KEY,
     SCRAPING_INTERVAL_HOURS,
@@ -368,6 +373,72 @@ async def send_telegram_alert(item: dict):
             logger.info(f"📢 Broadcasted to Telegram ({target_chat}): {item['title'][:50]}...")
         except Exception as e:
             logger.error(f"❌ Failed to broadcast to Telegram ({target_chat}): {e}")
+
+    # Also automatically broadcast to official WhatsApp Channel with exact website deep link
+    await send_whatsapp_channel_alert(item)
+
+
+async def send_whatsapp_channel_alert(item: dict):
+    """Formats and dispatches high-priority alerts to the Official WhatsApp Channel."""
+    try:
+        title = item.get("title", "").strip()
+        dept = item.get("department") or item.get("source_site") or "Govt of India"
+        vacancies = item.get("vacancies", "Refer Website")
+        qualification = item.get("eligibility", "10th / 12th / Graduate / Post Graduate")
+        pay = item.get("pay_level", "7th Pay Commission Level Matrix")
+        last_date = str(item.get("last_date", "Refer Official Circular")).split("(")[0].strip()
+        category = item.get("category", "Jobs").upper()
+
+        slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:80]
+        
+        # Exact website deep link
+        if "admit" in category.lower() or "hall" in title.lower():
+            deep_link = f"{WEBSITE_DOMAIN}#admit-card"
+            header_badge = "🎫 *ADMIT CARD / HALL TICKET RELEASED* 🚨"
+        elif "result" in category.lower() or "score" in title.lower():
+            deep_link = f"{WEBSITE_DOMAIN}#results"
+            header_badge = "🏆 *EXAM RESULT & MERIT LIST DECLARED* 📢"
+        elif "key" in category.lower() or "answer" in title.lower():
+            deep_link = f"{WEBSITE_DOMAIN}#answer-key"
+            header_badge = "📝 *OFFICIAL ANSWER KEY & OBJECTION LINK* 🔑"
+        else:
+            deep_link = f"{WEBSITE_DOMAIN}#job-detail?id={slug}"
+            header_badge = "📢 *NEW SARKARI RECRUITMENT 2025-26* 🇮🇳"
+
+        msg = f"""{header_badge}
+━━━━━━━━━━━━━━━━━━━━━
+📌 *{title.upper()}*
+
+🏛️ *Organization:* {dept}
+🎯 *Vacancies:* {vacancies} Posts
+🎓 *Qualification:* {qualification}
+💰 *Pay Scale:* {pay}
+📅 *Application Last Date:* {last_date}
+
+🔗 *Direct Notification & Online Apply Link:*
+👇👇👇
+{deep_link}
+
+━━━━━━━━━━━━━━━━━━━━━
+📲 *Join Official WhatsApp Channel for Instant Sarkari Alerts:*
+👉 {WHATSAPP_CHANNEL_URL}
+🔔 *StudyMate Sarkari* — 100% Free & Verified Updates"""
+
+        # Dispatch via Green-API / WhatsApp Cloud API if configured
+        if GREEN_API_INSTANCE_ID and GREEN_API_API_TOKEN:
+            import requests
+            url = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}/sendMessage/{GREEN_API_API_TOKEN}"
+            payload = {"chatId": WHATSAPP_CHANNEL_ID, "message": msg}
+            headers = {'Content-Type': 'application/json'}
+            res = requests.post(url, headers=headers, json=payload, timeout=12)
+            if res.status_code == 200:
+                logger.info(f"✅ Auto-broadcasted to WhatsApp Channel: {title[:45]}...")
+            else:
+                logger.warning(f"⚠️ WhatsApp API returned status {res.status_code}: {res.text}")
+        else:
+            logger.info(f"[WHATSAPP BROADCAST FORMATTED] -> Ready for channel ({WHATSAPP_CHANNEL_URL}):\n{msg[:150]}...")
+    except Exception as e:
+        logger.error(f"❌ WhatsApp Channel broadcast error: {e}")
 
 
 def save_to_supabase(item: dict) -> bool:

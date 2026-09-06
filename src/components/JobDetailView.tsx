@@ -17,6 +17,8 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
   onNavigate,
 }) => {
   const [activeSection, setActiveSection] = useState('dates');
+  const [shareSuccess, setShareSuccess] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
 
   // Interactive Countdown Timer
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({
@@ -38,6 +40,75 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Web Share and Social Helpers
+  const getShareUrl = () => {
+    return `${window.location.origin}${window.location.pathname}#job-detail?id=${job.id}`;
+  };
+
+  const getShareText = () => {
+    const lastDateClean = job.lastDate ? job.lastDate.split('(')[0].trim() : 'Check Details';
+    return `📢 *${job.title}*\n🏛️ Dept: ${job.department}\n🎯 Total Posts: ${job.vacanciesFormatted} Vacancies\n📅 Last Date: ${lastDateClean}\n💰 Pay Scale: ${job.payLevel}\n\n🔗 View Full Details & Apply Online:\n`;
+  };
+
+  const handleNativeShare = async () => {
+    const url = getShareUrl();
+    const text = getShareText();
+    const title = `${job.shortTitle || job.title} - StudyMate Sarkari`;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title,
+          text: text + url,
+          url,
+        });
+        setShareSuccess('Shared successfully! ✅');
+        setTimeout(() => setShareSuccess(null), 3500);
+        return;
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          setShowShareModal(true);
+        }
+      }
+    } else {
+      setShowShareModal(true);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    const url = getShareUrl();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = url;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setShareSuccess('Job Link copied to clipboard! 📋');
+      setTimeout(() => setShareSuccess(null), 3500);
+    } catch {
+      setShareSuccess('Failed to copy link');
+    }
+  };
+
+  const handleWhatsAppShare = () => {
+    const url = getShareUrl();
+    const text = getShareText();
+    const waUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(text + url)}`;
+    window.open(waUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleTelegramShare = () => {
+    const url = getShareUrl();
+    const text = getShareText();
+    const tgUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+    window.open(tgUrl, '_blank', 'noopener,noreferrer');
+  };
 
   // Mini Age Calculator state
   const [dob, setDob] = useState('2000-01-15');
@@ -110,10 +181,41 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Primary Native Share Button */}
+            <button
+              onClick={handleNativeShare}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#00236f] hover:bg-[#1e3a8a] text-white transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+              title="Share job via WhatsApp, Telegram, or Web Share"
+            >
+              <span className="material-symbols-outlined text-[18px]">share</span>
+              <span>Share Job</span>
+            </button>
+
+            {/* Quick WhatsApp Share */}
+            <button
+              onClick={handleWhatsAppShare}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#25D366]/15 hover:bg-[#25D366]/25 text-[#075E54] border border-[#25D366]/30 transition-all flex items-center gap-1 cursor-pointer"
+              title="Share on WhatsApp"
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#25D366]">chat</span>
+              <span className="hidden sm:inline">WhatsApp</span>
+            </button>
+
+            {/* Quick Telegram Share */}
+            <button
+              onClick={handleTelegramShare}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-bold bg-[#229ED9]/15 hover:bg-[#229ED9]/25 text-[#0088cc] border border-[#229ED9]/30 transition-all flex items-center gap-1 cursor-pointer"
+              title="Share on Telegram"
+            >
+              <span className="material-symbols-outlined text-[16px] text-[#229ED9]">send</span>
+              <span className="hidden sm:inline">Telegram</span>
+            </button>
+
+            {/* Bookmark Job Button */}
             <button
               onClick={() => onToggleBookmark(job.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 isSaved
                   ? 'bg-[#ffdcc3] text-[#904d00]'
                   : 'bg-[#eff4ff] text-[#00236f] hover:bg-[#dce9ff]'
@@ -122,10 +224,23 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
               <span className="material-symbols-outlined text-[18px]">
                 {isSaved ? 'bookmark_added' : 'bookmark_add'}
               </span>
-              {isSaved ? 'Saved in Aspirant Zone' : 'Bookmark Job'}
+              <span className="hidden md:inline">{isSaved ? 'Saved in Aspirant Zone' : 'Bookmark Job'}</span>
             </button>
           </div>
         </div>
+
+        {/* Share Success / Copied Toast Feedback */}
+        {shareSuccess && (
+          <div className="mb-3 px-4 py-2 bg-[#85f8c4] text-[#002114] text-xs font-black rounded-xl flex items-center justify-between shadow-xs animate-fade-in">
+            <span className="flex items-center gap-1.5">
+              <span className="material-symbols-outlined text-[18px]">check_circle</span>
+              {shareSuccess}
+            </span>
+            <button onClick={() => setShareSuccess(null)} className="text-[#002114]/80 hover:text-[#002114]">
+              <span className="material-symbols-outlined text-[16px]">close</span>
+            </button>
+          </div>
+        )}
 
         <h1 className="font-display font-black text-2xl sm:text-3xl text-[#00236f] tracking-tight leading-snug">
           {job.title}
@@ -525,8 +640,193 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Share with Aspirants & Study Groups Card */}
+          <div className="bg-gradient-to-br from-[#eff4ff] to-[#dce9ff] rounded-2xl border border-[#b9d5ff] p-5 shadow-xs">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="material-symbols-outlined text-[#00236f] text-[20px]">share</span>
+              <h3 className="font-display font-bold text-sm text-[#00236f]">Share with Study Groups</h3>
+            </div>
+            <p className="text-[11px] text-[#444651] mb-3">
+              Help your fellow candidates by sharing verified notification details directly to WhatsApp or Telegram groups.
+            </p>
+
+            <div className="space-y-2">
+              <button
+                onClick={handleNativeShare}
+                className="w-full bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">share</span>
+                <span>Share via Web Share / All Apps</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleWhatsAppShare}
+                  className="bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">chat</span>
+                  <span>WhatsApp</span>
+                </button>
+
+                <button
+                  onClick={handleTelegramShare}
+                  className="bg-[#229ED9] hover:bg-[#1e8ec3] text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">send</span>
+                  <span>Telegram</span>
+                </button>
+              </div>
+
+              <button
+                onClick={handleCopyLink}
+                className="w-full bg-white hover:bg-[#f1f5f9] text-[#00236f] border border-[#d3e4fe] text-xs font-bold py-2 rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                <span>Copy Recruitment Link</span>
+              </button>
+
+              <a
+                href="https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z"
+                target="_blank"
+                rel="noreferrer"
+                className="w-full bg-[#075E54] hover:bg-[#054c44] text-white text-xs font-black py-2 rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              >
+                <span className="material-symbols-outlined text-[16px] text-[#25D366]">chat</span>
+                <span>Join Official WhatsApp Channel</span>
+                <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+              </a>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* 5. Mobile Floating Action Bar with Instant Share */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-white/95 backdrop-blur-md border-t border-[#d3e4fe] px-4 py-2.5 shadow-lg flex items-center justify-between gap-3">
+        <button
+          onClick={onBack}
+          className="p-2 text-[#444651] hover:text-[#00236f] hover:bg-[#eff4ff] rounded-xl flex flex-col items-center cursor-pointer"
+        >
+          <span className="material-symbols-outlined text-[20px]">arrow_back</span>
+          <span className="text-[9px] font-bold">Back</span>
+        </button>
+
+        <button
+          onClick={handleNativeShare}
+          className="flex-1 bg-[#eff4ff] hover:bg-[#dce9ff] text-[#00236f] text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-[#d3e4fe] cursor-pointer active:scale-95 transition-all"
+        >
+          <span className="material-symbols-outlined text-[18px]">share</span>
+          <span>Share Job</span>
+        </button>
+
+        <button
+          onClick={handleWhatsAppShare}
+          className="bg-[#25D366] text-white p-2.5 rounded-xl flex items-center justify-center shadow-xs cursor-pointer active:scale-95"
+          title="Share to WhatsApp"
+        >
+          <span className="material-symbols-outlined text-[20px]">chat</span>
+        </button>
+
+        <a
+          href="https://ssc.gov.in"
+          target="_blank"
+          rel="noreferrer"
+          className="flex-1 bg-[#fe932c] hover:bg-[#fe932c]/90 text-[#2f1500] text-xs font-black py-2.5 px-3 rounded-xl flex items-center justify-center gap-1 shadow-sm text-center"
+        >
+          <span>Apply Now</span>
+          <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+        </a>
+      </div>
+
+      {/* 6. Share Modal Dialog (Fallback & Options) */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-[#d3e4fe] space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-[#00236f]">
+                <span className="material-symbols-outlined text-[24px]">share</span>
+                <h3 className="font-display font-black text-lg text-[#00236f]">Share Recruitment</h3>
+              </div>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="p-1 rounded-lg text-[#757682] hover:bg-[#eff4ff] hover:text-[#0b1c30] cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="p-3 bg-[#eff4ff] rounded-xl border border-[#d3e4fe]">
+              <h4 className="font-bold text-xs text-[#00236f] line-clamp-2">{job.title}</h4>
+              <p className="text-[11px] text-[#444651] mt-1">
+                {job.department} • {job.vacanciesFormatted} Posts • Last Date: {job.lastDate.split('(')[0]}
+              </p>
+            </div>
+
+            <div className="space-y-2.5">
+              <label className="text-[10px] font-bold text-[#757682] uppercase block">Share Directly Via</label>
+              
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  onClick={() => {
+                    handleWhatsAppShare();
+                    setShowShareModal(false);
+                  }}
+                  className="bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">chat</span>
+                  <span>WhatsApp</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    handleTelegramShare();
+                    setShowShareModal(false);
+                  }}
+                  className="bg-[#229ED9] hover:bg-[#1e8ec3] text-white text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">send</span>
+                  <span>Telegram</span>
+                </button>
+              </div>
+
+              {typeof navigator !== 'undefined' && 'share' in navigator && (
+                <button
+                  onClick={() => {
+                    setShowShareModal(false);
+                    handleNativeShare();
+                  }}
+                  className="w-full bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">phonelink_ring</span>
+                  <span>Use System Share Menu</span>
+                </button>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-[#eff4ff]">
+              <label className="text-[10px] font-bold text-[#757682] uppercase block mb-1">Direct Job URL</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={getShareUrl()}
+                  className="flex-1 bg-[#eff4ff] text-[11px] text-[#0b1c30] font-mono p-2.5 rounded-xl border border-[#d3e4fe] select-all focus:outline-none"
+                />
+                <button
+                  onClick={() => {
+                    handleCopyLink();
+                    setShowShareModal(false);
+                  }}
+                  className="bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shrink-0 transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                  <span>Copy</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -4,9 +4,10 @@ import { useTheme } from '../context/ThemeContext';
 export interface FooterProps {
   onNavigate: (tab: string, jobId?: string) => void;
   onOpenTelegram?: () => void;
+  isAdmin?: boolean;
 }
 
-export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram }) => {
+export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram, isAdmin = false }) => {
   const { theme, setTheme } = useTheme();
 
   const handleTelegramClick = () => {
@@ -17,9 +18,9 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram }) =>
     }
   };
   return (
-    <footer className="bg-[#eff4ff] border-t border-[#d3e4fe] pt-12 pb-8 mt-16 font-sans">
-      <div className="max-w-[1280px] mx-auto px-4 md:px-6">
-        {/* Telegram / WhatsApp Alert Subscription Callout Banner */}
+    <footer className="bg-[#eff4ff] dark:bg-[#070e1e] border-t border-[#d3e4fe] dark:border-[#1e324c] pt-12 pb-8 mt-16 font-sans w-full">
+      <div className="max-w-7xl mx-auto px-4 md:px-6">
+        {/* Telegram / Alert Subscription Callout Banner */}
         <div className="bg-gradient-to-r from-[#00236f] via-[#1e3a8a] to-[#003120] rounded-2xl p-6 md:p-8 text-white mb-12 shadow-lg relative overflow-hidden">
           <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none"></div>
           <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6">
@@ -32,24 +33,43 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram }) =>
                 Never Miss a Single Govt Recruitment Deadline
               </h3>
               <p className="text-white/80 text-sm mt-2">
-                Join over 2,50,000+ serious aspirants receiving automated hourly gazette notifications, direct application links, answer keys & admit card hall tickets directly on Telegram.
+                Join over 2,50,000+ serious aspirants receiving automated hourly gazette notifications, direct application links, answer keys &amp; admit card hall tickets.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <a
+                href="https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-[#25D366] hover:bg-[#20bd5a] text-[#002114] font-black text-sm px-6 py-3 rounded-xl shadow-md transition-all hover:scale-105 flex items-center gap-2 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">chat</span>
+                Join WhatsApp Channel
+              </a>
               <button
                 onClick={handleTelegramClick}
-                className="bg-[#fe932c] hover:bg-[#fe932c]/90 text-[#2f1500] font-black text-sm px-6 py-3 rounded-xl shadow-md transition-all hover:scale-105 flex items-center gap-2"
+                className="bg-[#fe932c] hover:bg-[#fe932c]/90 text-[#2f1500] font-black text-sm px-6 py-3 rounded-xl shadow-md transition-all hover:scale-105 flex items-center gap-2 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[20px]">send</span>
-                Join Telegram Channel
+                Join Telegram
               </button>
-              <button
-                onClick={() => onNavigate('telegram-bot')}
-                className="bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-5 py-3 rounded-xl border border-white/20 transition-all flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">smart_toy</span>
-                Bot Setup & Code
-              </button>
+              {isAdmin ? (
+                <button
+                  onClick={() => onNavigate('telegram-bot')}
+                  className="bg-[#003120] hover:bg-[#004a32] text-white font-bold text-sm px-5 py-3 rounded-xl border border-emerald-400/40 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+                  Bot Control Panel
+                </button>
+              ) : (
+                <button
+                  onClick={() => onNavigate('candidate-tools')}
+                  className="bg-white/10 hover:bg-white/20 text-white font-bold text-sm px-5 py-3 rounded-xl border border-white/20 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-[18px]">construction</span>
+                  Candidate Tools
+                </button>
+              )}
             </div>
           </div>
         </div>

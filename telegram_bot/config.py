@@ -25,6 +25,13 @@ TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID", "5165363865")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "5165363865")
 TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "5165363865")
 
+# WhatsApp Official Channel & API Configuration
+WHATSAPP_CHANNEL_URL = os.getenv("WHATSAPP_CHANNEL_URL", "https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z")
+WHATSAPP_CHANNEL_ID = os.getenv("WHATSAPP_CHANNEL_ID", "0029Vb8ycrRKbYMIlkbOGy1z@newsletter")
+GREEN_API_INSTANCE_ID = os.getenv("GREEN_API_INSTANCE_ID", "")
+GREEN_API_API_TOKEN = os.getenv("GREEN_API_API_TOKEN", "")
+WEBSITE_DOMAIN = os.getenv("WEBSITE_DOMAIN", "https://studymatesarkari.in/")
+
 # Supabase Credentials (Supports exact Render variable names)
 SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL", "")
 SUPABASE_KEY = (

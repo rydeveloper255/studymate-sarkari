@@ -1,27 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { GovernmentSource, TelegramBotLog } from '../types';
+import { GovernmentSource, TelegramBotLog, JobItem, AdmitCardItem, ResultItem, AnswerKeyItem } from '../types';
 import { supabaseService, SupabaseConfig } from '../services/supabaseService';
 import { SmartBotFeaturesTab } from './SmartBotFeaturesTab';
+import { WhatsAppChannelBroadcaster, WHATSAPP_CHANNEL_URL } from './WhatsAppChannelBroadcaster';
 
 export interface TelegramBotDashboardProps {
   sources: GovernmentSource[];
   botLogs: TelegramBotLog[];
+  jobs?: JobItem[];
+  admitCards?: AdmitCardItem[];
+  results?: ResultItem[];
+  answerKeys?: AnswerKeyItem[];
   onAddSource: (src: Omit<GovernmentSource, 'id' | 'itemsFoundCount' | 'lastStatus'>) => void;
   onToggleSource: (id: string) => void;
   onSimulateScrape: (sourceName: string) => void;
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: string, jobId?: string) => void;
+  onExitAdmin?: () => void;
 }
 
 export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
   sources,
   botLogs,
+  jobs = [],
+  admitCards = [],
+  results = [],
+  answerKeys = [],
   onAddSource,
   onToggleSource,
   onSimulateScrape,
   onNavigate,
+  onExitAdmin,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'smart' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('overview');
-  const [selectedCodeFile, setSelectedCodeFile] = useState<'bot.py' | 'config.py' | 'scrapers.py' | 'render.yaml' | 'sql'>('bot.py');
+  const [activeTab, setActiveTab] = useState<'overview' | 'whatsapp' | 'smart' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('overview');
+  const [selectedCodeFile, setSelectedCodeFile] = useState<'bot.py' | 'whatsapp_bot.py' | 'config.py' | 'scrapers.py' | 'render.yaml' | 'sql'>('whatsapp_bot.py');
   const [copiedKey, setCopiedKey] = useState(false);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
   const [telegramTestResult, setTelegramTestResult] = useState<{ success?: boolean; message?: string } | null>(null);
@@ -129,14 +140,27 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
 
   return (
     <div className="space-y-6 pb-12 font-sans">
-      {/* 1. Breadcrumb */}
-      <nav className="flex items-center gap-2 text-xs text-[#757682]">
-        <button onClick={() => onNavigate('home')} className="hover:text-[#00236f] flex items-center gap-1">
-          <span className="material-symbols-outlined text-[14px]">home</span> Home
-        </button>
-        <span>/</span>
-        <span className="text-[#0b1c30] font-bold">🤖 Telegram Bot & Government Scraper Engine</span>
-      </nav>
+      {/* 1. Breadcrumb & Admin Exit Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <nav className="flex items-center gap-2 text-xs text-[#757682] dark:text-[#94a3b8]">
+          <button onClick={() => onNavigate('home')} className="hover:text-[#00236f] dark:hover:text-white flex items-center gap-1">
+            <span className="material-symbols-outlined text-[14px]">home</span> Home
+          </button>
+          <span>/</span>
+          <span className="text-[#0b1c30] dark:text-white font-bold">👑 Admin: Telegram Bot &amp; Scraper Engine</span>
+        </nav>
+
+        {onExitAdmin && (
+          <button
+            onClick={onExitAdmin}
+            className="flex items-center gap-1.5 px-3 py-1 bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900 rounded-lg text-xs font-bold transition-all border border-red-200 dark:border-red-800"
+            title="Lock Admin Mode and Hide from Navigation"
+          >
+            <span className="material-symbols-outlined text-[15px]">lock</span>
+            <span>Exit &amp; Lock Admin Mode</span>
+          </button>
+        )}
+      </div>
 
       {/* 2. Banner */}
       <div className="bg-gradient-to-r from-[#003120] via-[#004a32] to-[#00236f] rounded-2xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
@@ -174,6 +198,7 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
       <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-[#d3e4fe] shadow-xs overflow-x-auto scrollbar-none">
         {[
           { id: 'overview', label: 'Dashboard & Activity Logs', icon: 'dashboard' },
+          { id: 'whatsapp', label: 'WhatsApp Channel Bot 📲', icon: 'chat', highlight: true },
           { id: 'smart', label: '10 Smart Bot Features 🧠', icon: 'psychology' },
           { id: 'render', label: 'Render.com Deployment 🚀', icon: 'cloud_upload' },
           { id: 'links', label: 'Government Links Directory', icon: 'link' },
@@ -186,7 +211,11 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
             onClick={() => setActiveTab(tab.id as any)}
             className={`py-2.5 px-4 rounded-xl text-xs md:text-[13px] font-bold transition-all flex items-center gap-2 shrink-0 ${
               activeTab === tab.id
-                ? 'bg-[#00236f] text-white shadow-xs'
+                ? tab.highlight
+                  ? 'bg-[#075E54] text-white shadow-xs'
+                  : 'bg-[#00236f] text-white shadow-xs'
+                : tab.highlight
+                ? 'bg-[#25D366]/15 text-[#075E54] hover:bg-[#25D366]/25 border border-[#25D366]/40'
                 : 'text-[#444651] hover:bg-[#eff4ff] hover:text-[#00236f]'
             }`}
           >
@@ -704,6 +733,17 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
         </div>
       )}
 
+      {/* Tab: WhatsApp Channel Automation & Broadcaster */}
+      {activeTab === 'whatsapp' && (
+        <WhatsAppChannelBroadcaster
+          jobs={jobs}
+          admitCards={admitCards}
+          results={results}
+          answerKeys={answerKeys}
+          onNavigate={onNavigate}
+        />
+      )}
+
       {/* Tab: 10 Smart AI Features */}
       {activeTab === 'smart' && <SmartBotFeaturesTab />}
 
@@ -947,15 +987,19 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
         <div className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              {['bot.py', 'config.py', 'render.yaml', 'scrapers.py', 'sql'].map((file) => (
+              {['whatsapp_bot.py', 'bot.py', 'config.py', 'render.yaml', 'scrapers.py', 'sql'].map((file) => (
                 <button
                   key={file}
                   onClick={() => setSelectedCodeFile(file as any)}
                   className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all ${
-                    selectedCodeFile === file ? 'bg-[#00236f] text-white' : 'bg-[#eff4ff] text-[#444651]'
+                    selectedCodeFile === file
+                      ? file === 'whatsapp_bot.py'
+                        ? 'bg-[#075E54] text-white shadow-xs'
+                        : 'bg-[#00236f] text-white'
+                      : 'bg-[#eff4ff] text-[#444651]'
                   }`}
                 >
-                  {file}
+                  {file === 'whatsapp_bot.py' ? '📲 whatsapp_bot.py' : file}
                 </button>
               ))}
             </div>
@@ -971,6 +1015,76 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
 
           <div className="bg-[#0b1c30] text-[#eaf1ff] p-4 rounded-xl font-mono text-xs overflow-x-auto max-h-[500px]">
             <pre>
+              {selectedCodeFile === 'whatsapp_bot.py' && `# telegram_bot/whatsapp_bot.py - Automated WhatsApp Channel Broadcaster
+# WhatsApp Channel: https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z
+# ==============================================================================
+
+import os
+import time
+import requests
+import json
+from supabase import create_client, Client
+
+WHATSAPP_CHANNEL_LINK = "${WHATSAPP_CHANNEL_URL}"
+WEBSITE_DOMAIN = "https://studymatesarkari.in/" # or your hosted domain
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY", "")
+
+# Green-API / WhatsApp Cloud API credentials
+GREEN_API_INSTANCE_ID = os.getenv("GREEN_API_INSTANCE_ID", "")
+GREEN_API_API_TOKEN = os.getenv("GREEN_API_API_TOKEN", "")
+WHATSAPP_CHANNEL_ID = os.getenv("WHATSAPP_CHANNEL_ID", "0029Vb8ycrRKbYMIlkbOGy1z@newsletter")
+
+def format_job_broadcast(job):
+    """Formats an attractive, emoji-rich broadcast with the exact website deep link."""
+    job_id = job.get("id", "ssc-cgl-2025")
+    title = job.get("title", "").upper()
+    dept = job.get("department", "Govt of India")
+    vacancies = job.get("vacanciesFormatted", "Multiple")
+    qualification = job.get("eligibility", "Graduate / 10th / 12th")
+    pay = job.get("payLevel", "Level 4 to 8")
+    last_date = str(job.get("lastDate", "Refer Website")).split("(")[0].strip()
+    
+    deep_link = f"{WEBSITE_DOMAIN}#job-detail?id={job_id}"
+
+    return f"""📢 *NEW GOVT JOB RECRUITMENT 2025-26* 🇮🇳
+━━━━━━━━━━━━━━━━━━━━━
+📌 *{title}*
+
+🏛️ *Department:* {dept}
+🎯 *Total Vacancies:* {vacancies} Posts
+🎓 *Qualification:* {qualification}
+💰 *Pay Scale:* {pay}
+📅 *Application Last Date:* {last_date}
+
+🔗 *Detailed Notification & Direct Apply Online Link:*
+👇👇👇
+{deep_link}
+
+━━━━━━━━━━━━━━━━━━━━━
+📲 *Join Official WhatsApp Channel for Instant Sarkari Alerts:*
+👉 {WHATSAPP_CHANNEL_LINK}
+🔔 *StudyMate Sarkari* — 100% Free & Verified Updates"""
+
+def post_to_whatsapp_channel(message_text):
+    """Sends message to WhatsApp Channel via Green-API / Cloud API."""
+    if not GREEN_API_INSTANCE_ID or not GREEN_API_API_TOKEN:
+        print("[*] WhatsApp API Token not configured. Formatted message ready:")
+        print(message_text)
+        return False
+    
+    url = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}/sendMessage/{GREEN_API_API_TOKEN}"
+    payload = {"chatId": WHATSAPP_CHANNEL_ID, "message": message_text}
+    headers = {'Content-Type': 'application/json'}
+    
+    try:
+        res = requests.post(url, headers=headers, json=payload, timeout=15)
+        return res.status_code == 200
+    except Exception as e:
+        print(f"Error: {e}")
+        return False`}
+
               {selectedCodeFile === 'render.yaml' && `# render.yaml - Render Blueprint Configuration
 # Auto-configures both Web Service (React+Express) & Background Worker (Python Bot)
 services:
