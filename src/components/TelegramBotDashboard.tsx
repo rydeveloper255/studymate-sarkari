@@ -403,6 +403,21 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
 
           {/* Render Step-by-Step Hindi Guide */}
           <div className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs space-y-4">
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+              <div className="flex items-center gap-2 text-amber-900 font-bold text-sm">
+                <span className="material-symbols-outlined text-[20px] text-amber-700">build_circle</span>
+                Render Build Error Fix (Cannot find module &apos;dist/server.cjs&apos; Solved)
+              </div>
+              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                Aapke Render dashboard me <strong>Build Command</strong> me sirf <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">bun install</code> ya <code className="bg-amber-100 px-1 py-0.5 rounded font-mono font-bold">npm install</code> tha, jisse code compile nahi hua tha. Humne 3 cheezein fix kar di hain:
+              </p>
+              <ul className="text-xs text-amber-900 list-disc pl-5 mt-2 space-y-1">
+                <li><strong>bun.lock delete:</strong> Incompatible Bun lockfile hata di gayi hai jisse standard Node.js use hoga.</li>
+                <li><strong>Self-Healing Start Script:</strong> Agar Render build step skip bhi karega, to <code className="bg-amber-100 px-1 py-0.5 rounded font-mono">npm start</code> khud check karke pehle project build karega fir server start karega!</li>
+                <li><strong>Render Settings:</strong> Render Dashboard ke <strong>Settings</strong> tab me jaakar <strong>Build Command</strong> ko <code className="bg-amber-100 px-1.5 py-0.5 rounded font-mono font-bold text-amber-950">npm install && npm run build</code> set kar lijiye.</li>
+              </ul>
+            </div>
+
             <h3 className="font-display font-bold text-base text-[#00236f] flex items-center gap-2">
               <span className="material-symbols-outlined text-[20px] text-[#904d00]">rocket_launch</span>
               Render.com Par Deploy Karne Ka Step-by-Step Tareeka (Hindi Guide)

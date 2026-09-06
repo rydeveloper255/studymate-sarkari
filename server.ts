@@ -21,19 +21,20 @@ async function startServer() {
 
   // 2. Safe client configuration route (automatically supplies Render environment variables to frontend)
   app.get('/api/config', (req, res) => {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
     const hasServiceRoleKey = !!(
       process.env.SUPABASE_SERVICE_ROLE_KEY ||
       process.env.SUPABASE_SECRET_ROLE_KEY ||
       process.env.SUPABASE_KEY
     );
     const hasTelegramToken = !!process.env.TELEGRAM_BOT_TOKEN;
+    const telegramAdminId = process.env.TELEGRAM_ADMIN_ID || process.env.TELEGRAM_CHAT_ID || '5165363865';
 
     res.json({
       supabaseUrl,
       supabaseAnonKey,
-      telegramAdminId: '5165363865',
+      telegramAdminId,
       hasServiceRoleKey,
       hasTelegramToken,
       isConfigured: !!(supabaseUrl && supabaseAnonKey),
@@ -43,7 +44,7 @@ async function startServer() {
   // 3. Test Telegram Alert endpoint (dispatches message directly to Telegram ID: 5165363865)
   app.post('/api/telegram/test-notify', async (req, res) => {
     const token = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_ADMIN_ID || '5165363865';
+    const chatId = process.env.TELEGRAM_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '5165363865';
 
     if (!token) {
       return res.status(400).json({
