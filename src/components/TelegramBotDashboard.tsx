@@ -3,6 +3,7 @@ import { GovernmentSource, TelegramBotLog, JobItem, AdmitCardItem, ResultItem, A
 import { supabaseService, SupabaseConfig } from '../services/supabaseService';
 import { SmartBotFeaturesTab } from './SmartBotFeaturesTab';
 import { WhatsAppChannelBroadcaster, WHATSAPP_CHANNEL_URL } from './WhatsAppChannelBroadcaster';
+import { TelegramChannelBroadcaster, TELEGRAM_CHANNEL_URL, TELEGRAM_CHANNEL_HANDLE } from './TelegramChannelBroadcaster';
 
 export interface TelegramBotDashboardProps {
   sources: GovernmentSource[];
@@ -31,7 +32,7 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
   onNavigate,
   onExitAdmin,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'whatsapp' | 'smart' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'telegram_channel' | 'whatsapp' | 'smart' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('overview');
   const [selectedCodeFile, setSelectedCodeFile] = useState<'bot.py' | 'whatsapp_bot.py' | 'config.py' | 'scrapers.py' | 'render.yaml' | 'sql'>('whatsapp_bot.py');
   const [copiedKey, setCopiedKey] = useState(false);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
@@ -198,7 +199,8 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
       <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-[#d3e4fe] shadow-xs overflow-x-auto scrollbar-none">
         {[
           { id: 'overview', label: 'Dashboard & Activity Logs', icon: 'dashboard' },
-          { id: 'whatsapp', label: 'WhatsApp Channel Bot 📲', icon: 'chat', highlight: true },
+          { id: 'telegram_channel', label: 'Telegram Channel Suite 📢', icon: 'send', highlight: 'telegram' },
+          { id: 'whatsapp', label: 'WhatsApp Channel Bot 📲', icon: 'chat', highlight: 'whatsapp' },
           { id: 'smart', label: '10 Smart Bot Features 🧠', icon: 'psychology' },
           { id: 'render', label: 'Render.com Deployment 🚀', icon: 'cloud_upload' },
           { id: 'links', label: 'Government Links Directory', icon: 'link' },
@@ -209,13 +211,17 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as any)}
-            className={`py-2.5 px-4 rounded-xl text-xs md:text-[13px] font-bold transition-all flex items-center gap-2 shrink-0 ${
+            className={`py-2.5 px-4 rounded-xl text-xs md:text-[13px] font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
               activeTab === tab.id
-                ? tab.highlight
+                ? tab.highlight === 'whatsapp'
                   ? 'bg-[#075E54] text-white shadow-xs'
+                  : tab.highlight === 'telegram'
+                  ? 'bg-[#0284c7] text-white shadow-xs'
                   : 'bg-[#00236f] text-white shadow-xs'
-                : tab.highlight
+                : tab.highlight === 'whatsapp'
                 ? 'bg-[#25D366]/15 text-[#075E54] hover:bg-[#25D366]/25 border border-[#25D366]/40'
+                : tab.highlight === 'telegram'
+                ? 'bg-[#0284c7]/15 text-[#0284c7] hover:bg-[#0284c7]/25 border border-[#0284c7]/40'
                 : 'text-[#444651] hover:bg-[#eff4ff] hover:text-[#00236f]'
             }`}
           >
@@ -731,6 +737,17 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tab: Telegram Channel Automation & Broadcaster */}
+      {activeTab === 'telegram_channel' && (
+        <TelegramChannelBroadcaster
+          jobs={jobs}
+          admitCards={admitCards}
+          results={results}
+          answerKeys={answerKeys}
+          onNavigate={onNavigate}
+        />
       )}
 
       {/* Tab: WhatsApp Channel Automation & Broadcaster */}

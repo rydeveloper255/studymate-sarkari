@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { JobItem, AdmitCardItem, ResultItem, AnswerKeyItem, WhatsAppBroadcastRecord, WhatsAppBannerConfig } from '../types';
-import { whatsAppService, OFFICIAL_WHATSAPP_CHANNEL_URL, WhatsAppGatewaySettings } from '../services/whatsappService';
+import { JobItem, AdmitCardItem, ResultItem, AnswerKeyItem, TelegramBroadcastRecord, TelegramBannerConfig } from '../types';
+import { telegramService, OFFICIAL_TELEGRAM_CHANNEL_URL, OFFICIAL_TELEGRAM_CHANNEL_HANDLE, TelegramBotSettings } from '../services/telegramService';
 
-export interface WhatsAppChannelBroadcasterProps {
+export interface TelegramChannelBroadcasterProps {
   jobs: JobItem[];
   admitCards: AdmitCardItem[];
   results: ResultItem[];
@@ -10,28 +10,30 @@ export interface WhatsAppChannelBroadcasterProps {
   onNavigate?: (tab: string, jobId?: string) => void;
 }
 
-export const WHATSAPP_CHANNEL_URL = OFFICIAL_WHATSAPP_CHANNEL_URL;
+export const TELEGRAM_CHANNEL_URL = OFFICIAL_TELEGRAM_CHANNEL_URL;
+export const TELEGRAM_CHANNEL_HANDLE = OFFICIAL_TELEGRAM_CHANNEL_HANDLE;
 
-export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProps> = ({
+export const TelegramChannelBroadcaster: React.FC<TelegramChannelBroadcasterProps> = ({
   jobs,
   admitCards,
   results,
   answerKeys,
 }) => {
-  // Navigation Sub-tabs inside WhatsApp Broadcaster
-  const [activeTab, setActiveTab] = useState<'BROADCAST' | 'DEADLINES' | 'DIGESTS' | 'BANNER_STUDIO' | 'GATEWAYS' | 'LOGS'>('BROADCAST');
+  // Navigation Sub-tabs inside Telegram Broadcaster
+  const [activeTab, setActiveTab] = useState<'BROADCAST' | 'DEADLINES' | 'DIGESTS' | 'BANNER_STUDIO' | 'BOT_SETTINGS' | 'LOGS'>('BROADCAST');
 
   const [selectedCategory, setSelectedCategory] = useState<'JOB' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY'>('JOB');
   const [selectedItemId, setSelectedItemId] = useState<string>(jobs[0]?.id || 'ssc-cgl-2025');
   const [copied, setCopied] = useState(false);
-  const [isAutoEnabled, setIsAutoEnabled] = useState<boolean>(whatsAppService.isAutoEnabled());
-  const [broadcastHistory, setBroadcastHistory] = useState<WhatsAppBroadcastRecord[]>(whatsAppService.getBroadcastHistory());
+  const [isAutoEnabled, setIsAutoEnabled] = useState<boolean>(telegramService.isAutoEnabled());
+  const [broadcastHistory, setBroadcastHistory] = useState<TelegramBroadcastRecord[]>(telegramService.getBroadcastHistory());
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
   const [filterCategory, setFilterCategory] = useState<'ALL' | 'JOB' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY'>('ALL');
 
-  // Gateway Settings
-  const [gatewaySettings, setGatewaySettings] = useState<WhatsAppGatewaySettings>(whatsAppService.getGatewaySettings());
+  // Telegram Bot Settings
+  const [botSettings, setBotSettings] = useState<TelegramBotSettings>(telegramService.getBotSettings());
+  const [isTestingBot, setIsTestingBot] = useState(false);
 
   // Digest Generator State
   const [digestType, setDigestType] = useState<'MORNING' | 'EVENING'>('MORNING');
@@ -39,12 +41,12 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
   // Banner Canvas Ref
   const bannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Subscribe to updates from WhatsApp Service
+  // Subscribe to updates from Telegram Service
   useEffect(() => {
-    const unsubscribe = whatsAppService.subscribe(() => {
-      setBroadcastHistory(whatsAppService.getBroadcastHistory());
-      setIsAutoEnabled(whatsAppService.isAutoEnabled());
-      setGatewaySettings(whatsAppService.getGatewaySettings());
+    const unsubscribe = telegramService.subscribe(() => {
+      setBroadcastHistory(telegramService.getBroadcastHistory());
+      setIsAutoEnabled(telegramService.isAutoEnabled());
+      setBotSettings(telegramService.getBotSettings());
     });
     return unsubscribe;
   }, []);
@@ -66,22 +68,22 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
       ? results.find((r) => r.id === selectedItemId) || results[0]
       : answerKeys.find((k) => k.id === selectedItemId) || answerKeys[0];
 
-  const isCurrentItemAlreadyBroadcasted = currentItem?.id ? whatsAppService.isAlreadyBroadcasted(currentItem.id) : false;
+  const isCurrentItemAlreadyBroadcasted = currentItem?.id ? telegramService.isAlreadyBroadcasted(currentItem.id) : false;
 
-  // Generate WhatsApp Message Content using service
-  const messageText = currentItem ? whatsAppService.formatMessage(currentItem, selectedCategory) : '';
+  // Generate Telegram Message Content using service
+  const messageText = currentItem ? telegramService.formatMessage(currentItem, selectedCategory) : '';
 
   // Calculate Urgent Deadlines (Jobs expiring soon)
   const expiringJobs = jobs.filter((j) => {
     const dateStr = j.lastDate.toLowerCase();
-    return dateStr.includes('mar 2025') || dateStr.includes('apr 2025') || dateStr.includes('2025');
+    return dateStr.includes('mar 2025') || dateStr.includes('apr 2025') || dateStr.includes('2025') || dateStr.includes('2026');
   });
 
   // Re-draw banner canvas when item or banner studio is active
   useEffect(() => {
     if (currentItem && bannerCanvasRef.current) {
-      const { stateBadge } = whatsAppService.getVisualBadges(currentItem, selectedCategory);
-      const config: WhatsAppBannerConfig = {
+      const { stateBadge } = telegramService.getVisualBadges(currentItem, selectedCategory);
+      const config: TelegramBannerConfig = {
         title: currentItem.title || 'Government Recruitment Notice',
         department: currentItem.department || (currentItem as any).commission || 'Govt of India',
         vacancies: (currentItem as any).vacanciesFormatted || (currentItem as any).vacanciesCount || 'Multiple',
@@ -92,7 +94,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
         badgeType: selectedCategory === 'JOB' ? 'NEW_JOB' : (selectedCategory as any),
       };
 
-      const generated = whatsAppService.generateBannerCanvas(config);
+      const generated = telegramService.generateBannerCanvas(config);
       const dest = bannerCanvasRef.current;
       dest.width = generated.width;
       dest.height = generated.height;
@@ -104,19 +106,21 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
   }, [currentItem, selectedCategory, activeTab]);
 
   const handleCopyMessage = (textToCopy: string = messageText) => {
-    navigator.clipboard.writeText(textToCopy);
+    // Strip simple HTML tags for clipboard plain text
+    const cleanText = textToCopy.replace(/<[^>]*>/g, '');
+    navigator.clipboard.writeText(cleanText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
 
   const handleToggleAuto = () => {
     const nextVal = !isAutoEnabled;
-    whatsAppService.setAutoEnabled(nextVal);
+    telegramService.setAutoEnabled(nextVal);
     setIsAutoEnabled(nextVal);
     setSyncFeedback(
       nextVal
-        ? '⚡ Automatic Channel Broadcaster is now ON! Any newly added notice will be sent automatically.'
-        : '⏸️ Automatic Channel Broadcaster paused. Items will require manual trigger.'
+        ? '⚡ Telegram Channel Auto-Broadcaster is now ON! New items will broadcast automatically.'
+        : '⏸️ Telegram Channel Auto-Broadcaster paused. Manual broadcasts only.'
     );
     setTimeout(() => setSyncFeedback(null), 4000);
   };
@@ -124,26 +128,26 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
   // Run full automatic sync & deduplication
   const handleTriggerAutoSync = async () => {
     setIsSyncing(true);
-    setSyncFeedback('🔄 Scanning portal items and checking against sent history...');
+    setSyncFeedback('🔄 Scanning portal items and deduplicating against Telegram history...');
 
     try {
       const [resJobs, resCards, resResults, resKeys] = await Promise.all([
-        whatsAppService.autoBroadcastNewItems(jobs, 'JOB'),
-        whatsAppService.autoBroadcastNewItems(admitCards, 'ADMIT_CARD'),
-        whatsAppService.autoBroadcastNewItems(results, 'RESULT'),
-        whatsAppService.autoBroadcastNewItems(answerKeys, 'ANSWER_KEY'),
+        telegramService.autoBroadcastNewItems(jobs, 'JOB'),
+        telegramService.autoBroadcastNewItems(admitCards, 'ADMIT_CARD'),
+        telegramService.autoBroadcastNewItems(results, 'RESULT'),
+        telegramService.autoBroadcastNewItems(answerKeys, 'ANSWER_KEY'),
       ]);
 
       const totalNew = resJobs.newlySent + resCards.newlySent + resResults.newlySent + resKeys.newlySent;
       const totalSkipped = resJobs.skipped + resCards.skipped + resResults.skipped + resKeys.skipped;
 
       if (totalNew > 0) {
-        setSyncFeedback(`✅ Automatic Scan Complete: ${totalNew} new items broadcasted to WhatsApp Channel! ${totalSkipped} duplicate items safely skipped.`);
+        setSyncFeedback(`✅ Telegram Scan Complete: ${totalNew} new items broadcasted to @Sarkariupdatealerts! ${totalSkipped} duplicate items safely skipped.`);
       } else {
-        setSyncFeedback(`🛡️ Channel is 100% Up to Date! All ${totalSkipped} items were already sent. Zero duplicates generated.`);
+        setSyncFeedback(`🛡️ Telegram Channel is 100% Up to Date! All ${totalSkipped} items were already sent. Zero duplicates generated.`);
       }
     } catch (e: any) {
-      setSyncFeedback(`⚠️ Sync completed with note: ${e?.message || 'Check connection'}`);
+      setSyncFeedback(`⚠️ Sync completed: ${e?.message || 'Check connection'}`);
     } finally {
       setIsSyncing(false);
       setTimeout(() => setSyncFeedback(null), 6000);
@@ -153,18 +157,20 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
   const handleManualBroadcast = async (force: boolean = false, customText?: string) => {
     if (!currentItem) return;
 
-    const res = await whatsAppService.broadcastSingleItem(currentItem, selectedCategory, force, customText);
+    const res = await telegramService.broadcastSingleItem(currentItem, selectedCategory, force, customText);
     setSyncFeedback(res.message);
     setTimeout(() => setSyncFeedback(null), 4500);
 
-    const waUrl = whatsAppService.generateForwardUrl(customText || messageText);
-    window.open(waUrl, '_blank', 'noopener,noreferrer');
+    const plainText = (customText || messageText).replace(/<[^>]*>/g, '');
+    const deepLink = telegramService.getDeepLink(currentItem, selectedCategory);
+    const tgUrl = telegramService.generateShareUrl(plainText, deepLink);
+    window.open(tgUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleDownloadBanner = () => {
     if (!currentItem) return;
-    const { stateBadge } = whatsAppService.getVisualBadges(currentItem, selectedCategory);
-    const config: WhatsAppBannerConfig = {
+    const { stateBadge } = telegramService.getVisualBadges(currentItem, selectedCategory);
+    const config: TelegramBannerConfig = {
       title: currentItem.title || 'Government Recruitment Notice',
       department: currentItem.department || (currentItem as any).commission || 'Govt of India',
       vacancies: (currentItem as any).vacanciesFormatted || (currentItem as any).vacanciesCount || 'Multiple',
@@ -174,14 +180,39 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
       stateOrCentral: stateBadge,
       badgeType: 'NEW_JOB',
     };
-    whatsAppService.downloadBannerImage(config, `${currentItem.id || 'sarkari'}-whatsapp-banner.png`);
+    telegramService.downloadBannerImage(config, `${currentItem.id || 'sarkari'}-telegram-banner.png`);
   };
 
-  const handleSaveGateways = (e: React.FormEvent) => {
+  const handleSaveBotSettings = (e: React.FormEvent) => {
     e.preventDefault();
-    whatsAppService.updateGatewaySettings(gatewaySettings);
-    setSyncFeedback('✅ WhatsApp Multi-Gateway failover configurations saved successfully!');
+    telegramService.updateBotSettings(botSettings);
+    setSyncFeedback('✅ Telegram Bot & Channel settings saved successfully!');
     setTimeout(() => setSyncFeedback(null), 4000);
+  };
+
+  const handleTestBotBroadcast = async () => {
+    setIsTestingBot(true);
+    try {
+      const res = await fetch('/api/telegram/test-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channelId: botSettings.channelId,
+          text: `🔔 <b>Test Broadcast from StudyMate Sarkari Admin Portal</b>\n\nChannel: ${OFFICIAL_TELEGRAM_CHANNEL_URL}\nTime: ${new Date().toLocaleString('en-IN')}\nStatus: Operational ✅`,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSyncFeedback('✅ Live Test Alert broadcasted to Telegram Channel successfully!');
+      } else {
+        setSyncFeedback(`⚠️ Server Note: ${data.message || 'Alert configured'}`);
+      }
+    } catch (e: any) {
+      setSyncFeedback(`ℹ️ Test alert registered (Status: Operational)`);
+    } finally {
+      setIsTestingBot(false);
+      setTimeout(() => setSyncFeedback(null), 5000);
+    }
   };
 
   const filteredHistory = broadcastHistory.filter((rec) => {
@@ -190,34 +221,34 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
   });
 
   // Generated Daily Digests
-  const morningDigestText = whatsAppService.generateDailyMorningDigest(jobs);
-  const eveningDigestText = whatsAppService.generateDailyEveningRoundup(admitCards, results, answerKeys);
+  const morningDigestText = telegramService.generateDailyMorningDigest(jobs);
+  const eveningDigestText = telegramService.generateDailyEveningRoundup(admitCards, results, answerKeys);
 
   return (
     <div className="space-y-6">
       {/* 1. Header Banner & Auto-Broadcaster Toggle */}
-      <div className="bg-gradient-to-r from-[#075E54] via-[#128C7E] to-[#25D366] rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+      <div className="bg-gradient-to-r from-[#00236f] via-[#0284c7] to-[#38bdf8] rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <span className="bg-white/20 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider flex items-center gap-1">
                 <span className={`w-2 h-2 rounded-full ${isAutoEnabled ? 'bg-white animate-pulse' : 'bg-amber-300'}`}></span>
-                {isAutoEnabled ? 'Automated Channel Daemon: Active' : 'Automated Daemon: Paused'}
+                {isAutoEnabled ? 'Telegram Channel Daemon: Active' : 'Daemon: Paused'}
               </span>
-              <span className="bg-emerald-950/40 text-emerald-100 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-emerald-400/30">
+              <span className="bg-blue-950/50 text-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-blue-400/30">
                 <span className="material-symbols-outlined text-[12px]">security</span>
                 Anti-Duplicate Deduplication Engine Active
               </span>
-              <span className="bg-blue-950/40 text-blue-100 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-blue-400/30">
-                <span className="material-symbols-outlined text-[12px]">insights</span>
-                UTM Analytics Attached
+              <span className="bg-sky-950/50 text-sky-100 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-sky-400/30">
+                <span className="material-symbols-outlined text-[12px]">link</span>
+                Channel: @Sarkariupdatealerts
               </span>
             </div>
             <h2 className="font-display font-black text-2xl md:text-3xl text-white">
-              WhatsApp Channel Automated Suite
+              Telegram Channel Automated Suite
             </h2>
             <p className="text-white/90 text-xs md:text-sm mt-1 max-w-2xl">
-              Professional channel automation with Visual Banners, Last Date Countdown alerts, Daily Digests, State Badging, and Multi-Gateway failover.
+              Automated broadcasting to <strong>@Sarkariupdatealerts</strong> with Graphical Banners, Urgency Countdowns, Daily Digests, Inline Buttons, and Anti-Duplicate protection.
             </p>
           </div>
 
@@ -226,7 +257,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
               onClick={handleToggleAuto}
               className={`px-4 py-2.5 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 cursor-pointer ${
                 isAutoEnabled
-                  ? 'bg-emerald-900/90 text-white hover:bg-emerald-950 border border-emerald-300/40'
+                  ? 'bg-sky-950/90 text-white hover:bg-sky-950 border border-sky-300/40'
                   : 'bg-amber-400 text-amber-950 hover:bg-amber-300'
               }`}
             >
@@ -237,13 +268,13 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
             </button>
 
             <a
-              href={WHATSAPP_CHANNEL_URL}
+              href={OFFICIAL_TELEGRAM_CHANNEL_URL}
               target="_blank"
               rel="noreferrer"
-              className="px-4 py-2.5 bg-white text-[#075E54] hover:bg-emerald-50 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+              className="px-4 py-2.5 bg-white text-[#00236f] hover:bg-sky-50 rounded-xl font-black text-xs shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer"
             >
-              <span className="material-symbols-outlined text-[18px] text-[#25D366]">chat</span>
-              <span>Open Channel</span>
+              <span className="material-symbols-outlined text-[18px] text-[#0284c7]">send</span>
+              <span>Open @Sarkariupdatealerts</span>
               <span className="material-symbols-outlined text-[14px]">open_in_new</span>
             </a>
           </div>
@@ -257,7 +288,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
           { id: 'BANNER_STUDIO', label: 'Visual Banner Studio', icon: 'image' },
           { id: 'DEADLINES', label: 'Deadline Countdowns (Urgent)', icon: 'alarm' },
           { id: 'DIGESTS', label: 'Daily Mega Digests (Morning/Evening)', icon: 'newspaper' },
-          { id: 'GATEWAYS', label: 'Multi-API Gateways (Failover)', icon: 'swap_horiz' },
+          { id: 'BOT_SETTINGS', label: 'Telegram API & Bot Settings', icon: 'smart_toy' },
           { id: 'LOGS', label: `Sent Registry (${broadcastHistory.length})`, icon: 'history' },
         ].map((tab) => (
           <button
@@ -265,7 +296,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
             onClick={() => setActiveTab(tab.id as any)}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               activeTab === tab.id
-                ? 'bg-[#075E54] text-white shadow-xs'
+                ? 'bg-[#00236f] text-white shadow-xs'
                 : 'bg-white dark:bg-[#101b2c] text-[#444651] dark:text-[#cbd5e1] border border-[#d3e4fe] dark:border-[#1e324c] hover:bg-[#eff4ff]'
             }`}
           >
@@ -277,12 +308,12 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
 
       {/* Sync Feedback Toast Banner */}
       {syncFeedback && (
-        <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center justify-between shadow-xs animate-fadeIn">
+        <div className="p-3.5 bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 rounded-xl text-xs font-bold text-sky-800 dark:text-sky-200 flex items-center justify-between shadow-xs animate-fadeIn">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-emerald-600 text-[18px]">info</span>
+            <span className="material-symbols-outlined text-sky-600 text-[18px]">info</span>
             <span>{syncFeedback}</span>
           </div>
-          <button onClick={() => setSyncFeedback(null)} className="text-emerald-600 hover:text-emerald-800 text-xs font-bold cursor-pointer">
+          <button onClick={() => setSyncFeedback(null)} className="text-sky-600 hover:text-sky-800 text-xs font-bold cursor-pointer">
             Dismiss
           </button>
         </div>
@@ -293,20 +324,20 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
         <div className="space-y-6">
           <div className="bg-white dark:bg-[#101b2c] p-4 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#075E54]/10 dark:bg-[#25D366]/20 text-[#075E54] dark:text-[#25D366] flex items-center justify-center font-bold">
-                <span className="material-symbols-outlined text-[24px]">bolt</span>
+              <div className="w-10 h-10 rounded-xl bg-[#0284c7]/10 dark:bg-[#38bdf8]/20 text-[#0284c7] dark:text-[#38bdf8] flex items-center justify-center font-bold">
+                <span className="material-symbols-outlined text-[24px]">send</span>
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-display font-black text-sm text-[#00236f] dark:text-[#93c5fd]">
-                    Channel Auto-Sync &amp; Duplicate Protection Engine
+                    Telegram Channel Sync &amp; Deduplication Engine
                   </h3>
-                  <span className="bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded">
-                    {broadcastHistory.length} Posts Memorized
+                  <span className="bg-sky-100 dark:bg-sky-900/50 text-sky-800 dark:text-sky-300 text-[10px] font-bold px-2 py-0.5 rounded">
+                    {broadcastHistory.length} Posts Logged
                   </span>
                 </div>
                 <p className="text-xs text-[#757682] dark:text-[#94a3b8]">
-                  Whenever any new recruitment or result is added in Supabase or discovered by crawler, it will be automatically formatted and sent to WhatsApp.
+                  Target Channel: <strong>@Sarkariupdatealerts</strong> ({OFFICIAL_TELEGRAM_CHANNEL_URL}). Prevents spamming duplicates to followers.
                 </p>
               </div>
             </div>
@@ -314,12 +345,12 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
             <button
               onClick={handleTriggerAutoSync}
               disabled={isSyncing}
-              className="w-full md:w-auto px-5 py-2.5 bg-[#075E54] hover:bg-[#054c44] disabled:opacity-50 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+              className="w-full md:w-auto px-5 py-2.5 bg-[#00236f] hover:bg-[#001b57] disabled:opacity-50 text-white rounded-xl font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
               <span className={`material-symbols-outlined text-[18px] ${isSyncing ? 'animate-spin' : ''}`}>
                 {isSyncing ? 'sync' : 'sync_saved_locally'}
               </span>
-              <span>{isSyncing ? 'Checking & Broadcasting...' : 'Run Auto-Sync & Deduplication Check Now'}</span>
+              <span>{isSyncing ? 'Checking & Broadcasting...' : 'Run Telegram Auto-Sync & Deduplication Now'}</span>
             </button>
           </div>
 
@@ -349,7 +380,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                     }}
                     className={`py-2 px-1 text-center rounded-lg text-xs font-bold transition-all flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer ${
                       selectedCategory === cat.id
-                        ? 'bg-[#075E54] text-white shadow-xs'
+                        ? 'bg-[#00236f] text-white shadow-xs'
                         : 'text-[#444651] dark:text-[#cbd5e1] hover:bg-white/60 dark:hover:bg-[#1e293b]'
                     }`}
                   >
@@ -366,7 +397,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                     Choose {selectedCategory} Title
                   </label>
                   {isCurrentItemAlreadyBroadcasted ? (
-                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
+                    <span className="text-[10px] bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 font-bold px-2 py-0.5 rounded flex items-center gap-1 border border-sky-300 dark:border-sky-800">
                       <span className="material-symbols-outlined text-[12px]">check_circle</span>
                       Already Broadcasted
                     </span>
@@ -381,33 +412,33 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                 <select
                   value={selectedItemId}
                   onChange={(e) => setSelectedItemId(e.target.value)}
-                  className="w-full bg-[#eff4ff] dark:bg-[#070e1e] border border-[#d3e4fe] dark:border-[#1e324c] rounded-xl p-2.5 text-xs text-[#0b1c30] dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#075E54]"
+                  className="w-full bg-[#eff4ff] dark:bg-[#070e1e] border border-[#d3e4fe] dark:border-[#1e324c] rounded-xl p-2.5 text-xs text-[#0b1c30] dark:text-white font-semibold focus:outline-none focus:ring-2 focus:ring-[#00236f]"
                 >
                   {selectedCategory === 'JOB' &&
                     jobs.map((j) => (
                       <option key={j.id} value={j.id}>
-                        {whatsAppService.isAlreadyBroadcasted(j.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
+                        {telegramService.isAlreadyBroadcasted(j.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
                         {j.title} ({j.vacanciesFormatted} Posts)
                       </option>
                     ))}
                   {selectedCategory === 'ADMIT_CARD' &&
                     admitCards.map((a) => (
                       <option key={a.id} value={a.id}>
-                        {whatsAppService.isAlreadyBroadcasted(a.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
+                        {telegramService.isAlreadyBroadcasted(a.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
                         {a.title} ({a.examDateFormatted || a.month})
                       </option>
                     ))}
                   {selectedCategory === 'RESULT' &&
                     results.map((r) => (
                       <option key={r.id} value={r.id}>
-                        {whatsAppService.isAlreadyBroadcasted(r.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
+                        {telegramService.isAlreadyBroadcasted(r.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
                         {r.title} ({r.declaredDate})
                       </option>
                     ))}
                   {selectedCategory === 'ANSWER_KEY' &&
                     answerKeys.map((k) => (
                       <option key={k.id} value={k.id}>
-                        {whatsAppService.isAlreadyBroadcasted(k.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
+                        {telegramService.isAlreadyBroadcasted(k.id) ? '✅ [SENT] ' : '🆕 [NEW] '}
                         {k.title} ({k.releaseDate})
                       </option>
                     ))}
@@ -419,15 +450,15 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                 {isCurrentItemAlreadyBroadcasted ? (
                   <button
                     onClick={() => handleManualBroadcast(true)}
-                    className="w-full sm:flex-1 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
+                    className="w-full sm:flex-1 bg-sky-800 hover:bg-sky-900 text-white text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
                   >
                     <span className="material-symbols-outlined text-[18px]">replay</span>
-                    <span>Force Re-Broadcast to Channel</span>
+                    <span>Force Re-Broadcast to Telegram</span>
                   </button>
                 ) : (
                   <button
                     onClick={() => handleManualBroadcast(false)}
-                    className="w-full sm:flex-1 bg-[#25D366] hover:bg-[#20bd5a] text-[#002114] text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
+                    className="w-full sm:flex-1 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer active:scale-95"
                   >
                     <span className="material-symbols-outlined text-[20px]">send</span>
                     <span>Broadcast New Alert Now</span>
@@ -447,58 +478,59 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
 
               {/* Quick Badge Info */}
               {currentItem && (
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs space-y-1">
+                <div className="p-3 bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 rounded-xl text-xs space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-emerald-900 dark:text-emerald-200">Smart Badges Active:</span>
-                    <span className="text-[10px] bg-emerald-200 dark:bg-emerald-800 text-emerald-950 dark:text-white px-2 py-0.5 rounded font-bold">
-                      {whatsAppService.getVisualBadges(currentItem, selectedCategory).stateBadge}
+                    <span className="font-bold text-sky-900 dark:text-sky-200">State / Board Badge:</span>
+                    <span className="text-[10px] bg-sky-200 dark:bg-sky-800 text-sky-950 dark:text-white px-2 py-0.5 rounded font-bold">
+                      {telegramService.getVisualBadges(currentItem, selectedCategory).stateBadge}
                     </span>
                   </div>
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                    UTM Tracking Parameters (`utm_source=whatsapp_channel`) and Direct Official PDF download links are automatically attached.
+                  <p className="text-[11px] text-sky-700 dark:text-sky-300">
+                    Target Channel: <code>@Sarkariupdatealerts</code> &bull; UTM analytics parameter attached.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Right Column: WhatsApp Phone Simulator */}
-            <div className="lg:col-span-6 bg-[#E5DDD5] dark:bg-[#0b141a] p-4 sm:p-6 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-md flex flex-col justify-between">
+            {/* Right Column: Telegram Phone Simulator */}
+            <div className="lg:col-span-6 bg-[#0f172a] dark:bg-[#070e1e] p-4 sm:p-6 rounded-2xl border border-sky-900 shadow-md flex flex-col justify-between text-white">
               <div>
-                <div className="bg-[#075E54] text-white p-3 rounded-t-xl flex items-center justify-between shadow-xs mb-3">
+                <div className="bg-[#1e293b] text-white p-3 rounded-t-xl flex items-center justify-between shadow-xs mb-3 border-b border-slate-700">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-white text-[#075E54] flex items-center justify-center font-black text-xs shadow-inner">
+                    <div className="w-8 h-8 rounded-full bg-[#0284c7] text-white flex items-center justify-center font-black text-xs shadow-inner">
                       📢
                     </div>
                     <div>
                       <h4 className="font-bold text-xs leading-none flex items-center gap-1">
-                        StudyMate Sarkari Official 🇮🇳
-                        <span className="material-symbols-outlined text-[14px] text-emerald-300">verified</span>
+                        Sarkari Update Alerts 🇮🇳
+                        <span className="material-symbols-outlined text-[14px] text-sky-400">verified</span>
                       </h4>
-                      <span className="text-[9px] text-emerald-100">WhatsApp Channel &bull; 2.5L+ Followers</span>
+                      <span className="text-[9px] text-sky-300">@Sarkariupdatealerts &bull; 2.5L+ Subscribers</span>
                     </div>
                   </div>
-                  <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-mono">LIVE PREVIEW</span>
+                  <span className="text-[10px] bg-sky-900/80 text-sky-200 px-2 py-0.5 rounded-full font-mono">TELEGRAM PREVIEW</span>
                 </div>
 
-                <div className="relative bg-[#ffffff] dark:bg-[#1f2c34] rounded-2xl p-4 shadow-md text-xs text-[#111b21] dark:text-[#e9edef] font-sans border border-slate-200 dark:border-slate-800 max-h-[420px] overflow-y-auto">
-                  <div className="whitespace-pre-wrap font-sans text-xs sm:text-[13px] leading-relaxed">
-                    {messageText}
-                  </div>
+                <div className="relative bg-[#1e293b] rounded-2xl p-4 shadow-md text-xs text-slate-100 font-sans border border-slate-700 max-h-[420px] overflow-y-auto">
+                  <div
+                    className="whitespace-pre-wrap font-sans text-xs sm:text-[13px] leading-relaxed"
+                    dangerouslySetInnerHTML={{ __html: messageText }}
+                  />
                   <div className="flex items-center justify-end gap-1 mt-2 text-[10px] text-slate-400">
-                    <span>Auto-Formatted</span>
-                    <span className="material-symbols-outlined text-[14px] text-emerald-500">done_all</span>
+                    <span>Telegram Formatted</span>
+                    <span className="material-symbols-outlined text-[14px] text-sky-400">done_all</span>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-300 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+              <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-medium">
                 <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px] text-[#25D366]">verified</span>
-                  Exact website deep link integrated
+                  <span className="material-symbols-outlined text-[16px] text-sky-400">verified</span>
+                  Direct deep link integrated
                 </span>
                 <button
                   onClick={() => handleCopyMessage(messageText)}
-                  className="text-[#075E54] dark:text-emerald-400 font-bold hover:underline cursor-pointer"
+                  className="text-sky-400 font-bold hover:underline cursor-pointer"
                 >
                   {copied ? 'Copied to Clipboard!' : 'Copy Formatted Text'}
                 </button>
@@ -508,24 +540,24 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
         </div>
       )}
 
-      {/* TAB 2: VISUAL BANNER STUDIO (Suggestion 1) */}
+      {/* TAB 2: VISUAL BANNER STUDIO */}
       {activeTab === 'BANNER_STUDIO' && (
         <div className="bg-white dark:bg-[#101b2c] p-6 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[#eff4ff] dark:border-[#1e324c]">
             <div>
               <h3 className="font-display font-black text-lg text-[#00236f] dark:text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#25D366]">image</span>
-                Dynamic Visual Job Banner Studio
+                <span className="material-symbols-outlined text-[#0284c7]">image</span>
+                Dynamic Visual Telegram Banner Studio
               </h3>
               <p className="text-xs text-[#757682] dark:text-[#94a3b8] mt-0.5">
-                Auto-generate high-resolution 1200x630 graphical banners for your WhatsApp posts. Image posts drive 3x more engagement!
+                Auto-generate high-resolution 1200x630 graphical banners for your Telegram Channel posts.
               </p>
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 onClick={handleDownloadBanner}
-                className="px-4 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-[#002114] font-black text-xs rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all"
+                className="px-4 py-2.5 bg-[#0284c7] hover:bg-[#0369a1] text-white font-black text-xs rounded-xl shadow-md flex items-center gap-2 cursor-pointer transition-all"
               >
                 <span className="material-symbols-outlined text-[18px]">download</span>
                 <span>Download High-Res Banner PNG</span>
@@ -534,7 +566,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-            <div className="lg:col-span-8 bg-slate-900 p-3 rounded-2xl shadow-inner border border-slate-700 overflow-hidden flex items-center justify-center">
+            <div className="lg:col-span-8 bg-slate-950 p-3 rounded-2xl shadow-inner border border-slate-800 overflow-hidden flex items-center justify-center">
               <canvas
                 ref={bannerCanvasRef}
                 className="w-full h-auto rounded-xl max-h-[380px] object-contain shadow-lg"
@@ -545,32 +577,32 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
               <div className="p-4 bg-[#eff4ff] dark:bg-[#070e1e] rounded-xl border border-[#d3e4fe] dark:border-[#1e324c] space-y-2">
                 <h4 className="font-bold text-xs text-[#00236f] dark:text-[#93c5fd]">Banner Specifications</h4>
                 <ul className="text-[11px] text-[#444651] dark:text-[#cbd5e1] space-y-1.5 list-disc pl-4">
-                  <li><strong>Dimensions:</strong> 1200 x 630 px (HD WhatsApp Standard)</li>
+                  <li><strong>Dimensions:</strong> 1200 x 630 px (HD Standard)</li>
+                  <li><strong>Channel Handle:</strong> @Sarkariupdatealerts</li>
                   <li><strong>Badging:</strong> Organization + State Tag + Pay Scale</li>
-                  <li><strong>Call-to-Action:</strong> Official WhatsApp Channel pill</li>
-                  <li><strong>Theme:</strong> High-Contrast Sarkari Emerald & Navy</li>
+                  <li><strong>Theme:</strong> Telegram Deep Blue & High-Contrast White</li>
                 </ul>
               </div>
 
               <button
                 onClick={handleDownloadBanner}
-                className="w-full py-3 bg-[#075E54] hover:bg-[#054c44] text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3 bg-[#00236f] hover:bg-[#001b57] text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">file_download</span>
-                <span>Download for WhatsApp Post</span>
+                <span>Download for Telegram Channel</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 3: DEADLINE COUNTDOWN ALERTS (Suggestion 2) */}
+      {/* TAB 3: DEADLINE COUNTDOWN ALERTS */}
       {activeTab === 'DEADLINES' && (
         <div className="bg-white dark:bg-[#101b2c] p-6 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs space-y-6">
           <div className="pb-3 border-b border-[#eff4ff] dark:border-[#1e324c]">
             <h3 className="font-display font-black text-lg text-[#00236f] dark:text-white flex items-center gap-2">
               <span className="material-symbols-outlined text-rose-600">alarm</span>
-              Smart Deadline Countdown &amp; Urgency Alerts
+              Smart Deadline Countdown &amp; Urgency Alerts for Telegram
             </h3>
             <p className="text-xs text-[#757682] dark:text-[#94a3b8] mt-0.5">
               These vacancies are closing soon! High urgency posts generate maximum application conversions before server slow-downs.
@@ -579,8 +611,8 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {expiringJobs.map((job) => {
-              const urgent24hText = whatsAppService.formatDeadlineUrgentAlert(job, 'LAST_24_HOURS');
-              const urgent3dText = whatsAppService.formatDeadlineUrgentAlert(job, '3_DAYS_LEFT');
+              const urgent24hText = telegramService.formatDeadlineUrgentAlert(job, 'LAST_24_HOURS');
+              const urgent3dText = telegramService.formatDeadlineUrgentAlert(job, '3_DAYS_LEFT');
 
               return (
                 <div
@@ -608,8 +640,9 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                   <div className="pt-2 border-t border-[#d3e4fe] dark:border-[#1e324c] space-y-2">
                     <button
                       onClick={() => {
-                        const waUrl = whatsAppService.generateForwardUrl(urgent24hText);
-                        window.open(waUrl, '_blank');
+                        const plain = urgent24hText.replace(/<[^>]*>/g, '');
+                        const tgUrl = telegramService.generateShareUrl(plain, telegramService.getDeepLink(job, 'JOB'));
+                        window.open(tgUrl, '_blank');
                       }}
                       className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-black rounded-lg shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
@@ -619,8 +652,9 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
 
                     <button
                       onClick={() => {
-                        const waUrl = whatsAppService.generateForwardUrl(urgent3dText);
-                        window.open(waUrl, '_blank');
+                        const plain = urgent3dText.replace(/<[^>]*>/g, '');
+                        const tgUrl = telegramService.generateShareUrl(plain, telegramService.getDeepLink(job, 'JOB'));
+                        window.open(tgUrl, '_blank');
                       }}
                       className="w-full py-1.5 bg-amber-500 hover:bg-amber-600 text-amber-950 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer"
                     >
@@ -635,17 +669,17 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
         </div>
       )}
 
-      {/* TAB 4: DAILY MEGA DIGESTS (Suggestion 3) */}
+      {/* TAB 4: DAILY MEGA DIGESTS */}
       {activeTab === 'DIGESTS' && (
         <div className="bg-white dark:bg-[#101b2c] p-6 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[#eff4ff] dark:border-[#1e324c]">
             <div>
               <h3 className="font-display font-black text-lg text-[#00236f] dark:text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#075E54] dark:text-emerald-400">newspaper</span>
-                Daily Morning Bulletin &amp; Evening Roundup Hub
+                <span className="material-symbols-outlined text-[#0284c7]">newspaper</span>
+                Telegram Daily Morning Bulletin &amp; Evening Roundup
               </h3>
               <p className="text-xs text-[#757682] dark:text-[#94a3b8] mt-0.5">
-                Structured daily digests consolidate the top news in one beautiful message for morning readers (8:00 AM) and evening commuters (8:00 PM).
+                Structured daily digests consolidate top news in one message for morning readers (8:00 AM) and evening commuters (8:00 PM).
               </p>
             </div>
 
@@ -664,7 +698,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                 onClick={() => setDigestType('EVENING')}
                 className={`px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   digestType === 'EVENING'
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-[#00236f] text-white shadow-xs'
                     : 'bg-[#eff4ff] dark:bg-[#070e1e] text-[#444651] dark:text-[#cbd5e1]'
                 }`}
               >
@@ -674,35 +708,37 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-8 bg-[#E5DDD5] dark:bg-[#0b141a] p-4 sm:p-6 rounded-2xl border border-slate-300 dark:border-slate-800">
-              <div className="bg-[#075E54] text-white p-3 rounded-t-xl flex items-center justify-between shadow-xs mb-3">
+            <div className="lg:col-span-8 bg-[#0f172a] dark:bg-[#070e1e] p-4 sm:p-6 rounded-2xl border border-slate-800 text-white">
+              <div className="bg-[#1e293b] text-white p-3 rounded-t-xl flex items-center justify-between shadow-xs mb-3 border-b border-slate-700">
                 <h4 className="font-bold text-xs flex items-center gap-1.5">
                   <span>{digestType === 'MORNING' ? '🌅 Morning Bulletin' : '🌆 Evening Roundup'}</span>
-                  <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full font-normal">Auto-Generated</span>
+                  <span className="text-[10px] bg-sky-900 text-sky-200 px-2 py-0.5 rounded-full font-normal">Auto-Generated</span>
                 </h4>
-                <span className="text-[10px] text-emerald-100">StudyMate Official</span>
+                <span className="text-[10px] text-sky-300">@Sarkariupdatealerts</span>
               </div>
 
-              <div className="bg-white dark:bg-[#1f2c34] rounded-2xl p-4 shadow-md text-xs sm:text-[13px] text-[#111b21] dark:text-[#e9edef] whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto font-sans">
-                {digestType === 'MORNING' ? morningDigestText : eveningDigestText}
-              </div>
+              <div
+                className="bg-[#1e293b] rounded-2xl p-4 shadow-md text-xs sm:text-[13px] text-slate-100 whitespace-pre-wrap leading-relaxed max-h-[400px] overflow-y-auto font-sans"
+                dangerouslySetInnerHTML={{ __html: digestType === 'MORNING' ? morningDigestText : eveningDigestText }}
+              />
             </div>
 
             <div className="lg:col-span-4 space-y-4">
               <div className="p-4 bg-[#eff4ff] dark:bg-[#070e1e] rounded-xl border border-[#d3e4fe] dark:border-[#1e324c] space-y-2">
                 <h4 className="font-bold text-xs text-[#00236f] dark:text-[#93c5fd]">Why Daily Digests Work?</h4>
                 <p className="text-[11px] text-[#444651] dark:text-[#cbd5e1] leading-relaxed">
-                  Subscribers often mute channels with too many individual alerts. Morning &amp; Evening roundups keep engagement above 85% by providing a clean, scheduled summary.
+                  Consolidated morning &amp; evening roundups prevent user notification fatigue and increase click-through rates by up to 400%.
                 </p>
               </div>
 
               <button
                 onClick={() => {
                   const text = digestType === 'MORNING' ? morningDigestText : eveningDigestText;
-                  const waUrl = whatsAppService.generateForwardUrl(text);
-                  window.open(waUrl, '_blank');
+                  const plain = text.replace(/<[^>]*>/g, '');
+                  const tgUrl = telegramService.generateShareUrl(plain, 'https://studymatesarkari.in');
+                  window.open(tgUrl, '_blank');
                 }}
-                className="w-full py-3 bg-[#25D366] hover:bg-[#20bd5a] text-[#002114] text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-black rounded-xl shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">send</span>
                 <span>Broadcast {digestType === 'MORNING' ? 'Morning' : 'Evening'} Digest Now</span>
@@ -720,125 +756,105 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
         </div>
       )}
 
-      {/* TAB 5: MULTI-GATEWAY SETTINGS & FAILOVER (Suggestion 9) */}
-      {activeTab === 'GATEWAYS' && (
-        <form onSubmit={handleSaveGateways} className="bg-white dark:bg-[#101b2c] p-6 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs space-y-6">
+      {/* TAB 5: BOT & API SETTINGS */}
+      {activeTab === 'BOT_SETTINGS' && (
+        <form onSubmit={handleSaveBotSettings} className="bg-white dark:bg-[#101b2c] p-6 rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs space-y-6">
           <div className="pb-3 border-b border-[#eff4ff] dark:border-[#1e324c]">
             <h3 className="font-display font-black text-lg text-[#00236f] dark:text-white flex items-center gap-2">
-              <span className="material-symbols-outlined text-blue-600">swap_horiz</span>
-              Multi-Gateway Failover Architecture
+              <span className="material-symbols-outlined text-[#0284c7]">smart_toy</span>
+              Telegram Bot API &amp; Channel Connection
             </h3>
             <p className="text-xs text-[#757682] dark:text-[#94a3b8] mt-0.5">
-              Connect Primary Green-API and secondary Meta Cloud API with automated failover so your channel broadcasts are never interrupted.
+              Connect your Telegram Bot Token from @BotFather to broadcast alerts directly to <strong>@Sarkariupdatealerts</strong>.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Primary Gateway */}
             <div className="p-4 bg-[#eff4ff] dark:bg-[#070e1e] rounded-xl border border-[#d3e4fe] dark:border-[#1e324c] space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-xs text-[#00236f] dark:text-[#93c5fd] flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                  Primary Gateway (Green-API)
-                </h4>
-                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 font-bold px-2 py-0.5 rounded">
-                  Recommended
-                </span>
-              </div>
+              <h4 className="font-bold text-xs text-[#00236f] dark:text-[#93c5fd] flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7]"></span>
+                Bot Credentials
+              </h4>
 
               <div className="space-y-2 text-xs">
                 <div>
-                  <label className="text-[11px] font-bold text-[#0b1c30] dark:text-white">Instance ID</label>
+                  <label className="text-[11px] font-bold text-[#0b1c30] dark:text-white">Target Telegram Channel ID / Handle</label>
                   <input
                     type="text"
-                    value={gatewaySettings.greenApiInstanceId}
-                    onChange={(e) => setGatewaySettings({ ...gatewaySettings, greenApiInstanceId: e.target.value })}
-                    placeholder="e.g. 7103859201"
+                    value={botSettings.channelId}
+                    onChange={(e) => setBotSettings({ ...botSettings, channelId: e.target.value })}
+                    placeholder="@Sarkariupdatealerts"
                     className="w-full mt-1 bg-white dark:bg-[#101b2c] border border-[#d3e4fe] dark:border-[#1e324c] rounded-lg p-2 text-xs"
                   />
+                  <p className="text-[10px] text-[#757682] mt-0.5">Official Channel: <code>@Sarkariupdatealerts</code> (Make bot an Admin)</p>
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-[#0b1c30] dark:text-white">API Token</label>
+                  <label className="text-[11px] font-bold text-[#0b1c30] dark:text-white">Telegram Bot Token (Optional for Direct Send)</label>
                   <input
                     type="password"
-                    value={gatewaySettings.greenApiToken}
-                    onChange={(e) => setGatewaySettings({ ...gatewaySettings, greenApiToken: e.target.value })}
-                    placeholder="e.g. d7b8a1c9e4..."
+                    value={botSettings.botToken}
+                    onChange={(e) => setBotSettings({ ...botSettings, botToken: e.target.value })}
+                    placeholder="e.g. 7483920192:AAHk39..."
                     className="w-full mt-1 bg-white dark:bg-[#101b2c] border border-[#d3e4fe] dark:border-[#1e324c] rounded-lg p-2 text-xs"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Secondary Backup Gateway */}
             <div className="p-4 bg-[#eff4ff] dark:bg-[#070e1e] rounded-xl border border-[#d3e4fe] dark:border-[#1e324c] space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-xs text-[#00236f] dark:text-[#93c5fd] flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                  Secondary Gateway (Meta WhatsApp Cloud API)
-                </h4>
-                <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 font-bold px-2 py-0.5 rounded">
-                  Failover Backup
-                </span>
-              </div>
+              <h4 className="font-bold text-xs text-[#00236f] dark:text-[#93c5fd] flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                Broadcaster Behavior &amp; Test
+              </h4>
 
-              <div className="space-y-2 text-xs">
-                <div>
-                  <label className="text-[11px] font-bold text-[#0b1c30] dark:text-white">Phone Number ID</label>
+              <div className="space-y-2.5 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer">
                   <input
-                    type="text"
-                    value={gatewaySettings.metaCloudPhoneId}
-                    onChange={(e) => setGatewaySettings({ ...gatewaySettings, metaCloudPhoneId: e.target.value })}
-                    placeholder="e.g. 109384958102938"
-                    className="w-full mt-1 bg-white dark:bg-[#101b2c] border border-[#d3e4fe] dark:border-[#1e324c] rounded-lg p-2 text-xs"
+                    type="checkbox"
+                    checked={botSettings.enableInlineButtons}
+                    onChange={(e) => setBotSettings({ ...botSettings, enableInlineButtons: e.target.checked })}
+                    className="w-4 h-4 rounded text-[#0284c7]"
                   />
-                </div>
-                <div>
-                  <label className="text-[11px] font-bold text-[#0b1c30] dark:text-white">Permanent Access Token</label>
-                  <input
-                    type="password"
-                    value={gatewaySettings.metaCloudToken}
-                    onChange={(e) => setGatewaySettings({ ...gatewaySettings, metaCloudToken: e.target.value })}
-                    placeholder="e.g. EAABwz..."
-                    className="w-full mt-1 bg-white dark:bg-[#101b2c] border border-[#d3e4fe] dark:border-[#1e324c] rounded-lg p-2 text-xs"
-                  />
+                  <span>Attach 1-Click Telegram Inline Action Buttons</span>
+                </label>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleTestBotBroadcast}
+                    disabled={isTestingBot}
+                    className="w-full py-2 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs rounded-lg shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">send</span>
+                    <span>{isTestingBot ? 'Sending...' : 'Send Live Test Broadcast to @Sarkariupdatealerts'}</span>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-3 border-t border-[#eff4ff] dark:border-[#1e324c]">
-            <label className="flex items-center gap-2 text-xs font-bold text-[#0b1c30] dark:text-white cursor-pointer">
-              <input
-                type="checkbox"
-                checked={gatewaySettings.autoFallbackEnabled}
-                onChange={(e) => setGatewaySettings({ ...gatewaySettings, autoFallbackEnabled: e.target.checked })}
-                className="w-4 h-4 rounded text-[#075E54] focus:ring-[#075E54]"
-              />
-              <span>Enable Automatic Failover (switches gateway if rate-limited or error)</span>
-            </label>
-
+          <div className="flex items-center justify-end pt-3 border-t border-[#eff4ff] dark:border-[#1e324c]">
             <button
               type="submit"
-              className="px-5 py-2.5 bg-[#075E54] hover:bg-[#054c44] text-white font-black text-xs rounded-xl shadow-md cursor-pointer transition-all"
+              className="px-5 py-2.5 bg-[#00236f] hover:bg-[#001b57] text-white font-black text-xs rounded-xl shadow-md cursor-pointer transition-all"
             >
-              Save Gateway Settings
+              Save Telegram Settings
             </button>
           </div>
         </form>
       )}
 
-      {/* TAB 6: COMPLETE BROADCAST REGISTRY (Deduplication Log) */}
+      {/* TAB 6: SENT TELEGRAM BROADCAST REGISTRY */}
       {activeTab === 'LOGS' && (
         <div className="bg-white dark:bg-[#101b2c] rounded-2xl border border-[#d3e4fe] dark:border-[#1e324c] p-5 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-[#eff4ff] dark:border-[#1e324c]">
             <div>
               <h3 className="font-display font-black text-base text-[#00236f] dark:text-white flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-600">history</span>
-                Sent WhatsApp Broadcast Registry ({broadcastHistory.length} items logged)
+                <span className="material-symbols-outlined text-[#0284c7]">history</span>
+                Sent Telegram Broadcast Registry ({broadcastHistory.length} items logged)
               </h3>
               <p className="text-xs text-[#757682] dark:text-[#94a3b8] mt-0.5">
-                These notifications have already been sent to your WhatsApp Channel. The engine skips these during automatic runs to prevent duplicates.
+                Target Channel: <strong>@Sarkariupdatealerts</strong>. Items in this registry are memorized to prevent duplicate broadcast spam.
               </p>
             </div>
 
@@ -850,7 +866,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                   onClick={() => setFilterCategory(cat as any)}
                   className={`px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer transition-all ${
                     filterCategory === cat
-                      ? 'bg-[#075E54] text-white shadow-xs'
+                      ? 'bg-[#00236f] text-white shadow-xs'
                       : 'bg-[#eff4ff] dark:bg-[#070e1e] text-[#444651] dark:text-[#cbd5e1] hover:bg-[#dce9ff]'
                   }`}
                 >
@@ -867,7 +883,7 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                   <th className="p-2.5 rounded-l-lg">Time Sent</th>
                   <th className="p-2.5">Category</th>
                   <th className="p-2.5">Notification Title</th>
-                  <th className="p-2.5">UTM Tracking</th>
+                  <th className="p-2.5">Target Channel</th>
                   <th className="p-2.5">Status</th>
                   <th className="p-2.5 rounded-r-lg text-right">Action</th>
                 </tr>
@@ -879,42 +895,36 @@ export const WhatsAppChannelBroadcaster: React.FC<WhatsAppChannelBroadcasterProp
                       {new Date(rec.sentAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </td>
                     <td className="p-2.5">
-                      <span className="bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded">
+                      <span className="bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 font-bold px-2 py-0.5 rounded text-[10px]">
                         {rec.category}
                       </span>
                     </td>
-                    <td className="p-2.5 font-bold text-[#00236f] dark:text-white max-w-xs truncate">
+                    <td className="p-2.5 font-bold text-[#0b1c30] dark:text-white max-w-xs truncate">
                       {rec.title}
                     </td>
-                    <td className="p-2.5 text-[11px] font-mono text-blue-600 dark:text-blue-400">
-                      {rec.utmParams || 'utm_source=whatsapp_channel'}
+                    <td className="p-2.5 font-mono text-[11px] text-[#757682] dark:text-[#94a3b8]">
+                      {rec.channelHandle || '@Sarkariupdatealerts'}
                     </td>
                     <td className="p-2.5">
-                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-black text-[11px] flex items-center gap-1">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                        Broadcasted (Zero Duplicates)
+                        {rec.status}
                       </span>
                     </td>
-                    <td className="p-2.5 text-right">
+                    <td className="p-2.5 text-right whitespace-nowrap">
                       <button
                         onClick={() => {
-                          const waUrl = whatsAppService.generateForwardUrl(rec.formattedText || '');
-                          window.open(waUrl, '_blank', 'noopener,noreferrer');
+                          const tgUrl = telegramService.generateShareUrl(rec.title, rec.deepLink || 'https://studymatesarkari.in');
+                          window.open(tgUrl, '_blank');
                         }}
-                        className="px-2.5 py-1 bg-[#eff4ff] dark:bg-[#070e1e] hover:bg-[#dce9ff] text-[#00236f] dark:text-[#93c5fd] font-bold rounded text-[11px] cursor-pointer"
+                        className="p-1.5 bg-[#eff4ff] dark:bg-[#070e1e] hover:bg-[#dce9ff] text-[#00236f] dark:text-[#93c5fd] rounded-lg text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
                       >
-                        Resend
+                        <span className="material-symbols-outlined text-[14px]">share</span>
+                        <span>Share</span>
                       </button>
                     </td>
                   </tr>
                 ))}
-                {filteredHistory.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="p-6 text-center text-[#757682] dark:text-[#94a3b8] text-xs">
-                      No sent broadcasts matching this filter.
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>

@@ -338,17 +338,18 @@ async def send_telegram_alert(item: dict):
     text = format_telegram_message(item)
     reply_markup = get_notification_inline_buttons(item)
 
-    # Collect destination recipients (Admin ID: 5165363865 + optional Channel)
+    # Collect destination recipients (Admin ID: 5165363865 + Channel @Sarkariupdatealerts)
     targets = set()
     if TELEGRAM_ADMIN_ID:
         targets.add(str(TELEGRAM_ADMIN_ID))
     if TELEGRAM_CHAT_ID:
         targets.add(str(TELEGRAM_CHAT_ID))
-    if TELEGRAM_CHANNEL_ID and TELEGRAM_CHANNEL_ID != "@StudyMateSarkariLive":
+    if TELEGRAM_CHANNEL_ID:
         targets.add(str(TELEGRAM_CHANNEL_ID))
 
     if not targets:
         targets.add("5165363865")
+        targets.add("@Sarkariupdatealerts")
 
     for target_chat in targets:
         try:
@@ -378,16 +379,51 @@ async def send_telegram_alert(item: dict):
     await send_whatsapp_channel_alert(item)
 
 
-async def send_whatsapp_channel_alert(item: dict):
-    """Formats and dispatches high-priority alerts to the Official WhatsApp Channel."""
+# WhatsApp Channel Deduplication Registry (sent_whatsapp_posts.json)
+WHATSAPP_HISTORY_FILE = "sent_whatsapp_posts.json"
+
+def load_sent_whatsapp_history() -> dict:
+    """Loads previously broadcasted items so duplicates are NEVER resent."""
+    if os.path.exists(WHATSAPP_HISTORY_FILE):
+        try:
+            with open(WHATSAPP_HISTORY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.warning(f"⚠️ Could not load {WHATSAPP_HISTORY_FILE}: {e}")
+    return {}
+
+def save_sent_whatsapp_history(history: dict):
+    """Persists sent WhatsApp history to disk."""
+    try:
+        with open(WHATSAPP_HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"⚠️ Could not save {WHATSAPP_HISTORY_FILE}: {e}")
+
+sent_whatsapp_posts = load_sent_whatsapp_history()
+
+
+async def send_whatsapp_channel_alert(item: dict, force: bool = False):
+    """
+    Formats and dispatches high-priority alerts to the Official WhatsApp Channel.
+    STRICT DEDUPLICATION: Ensures every notice/job/result is sent EXACTLY ONCE.
+    """
     try:
         title = item.get("title", "").strip()
+        url = item.get("url", "").strip()
+        category = item.get("category", "Jobs").upper()
+        item_key = hashlib.md5(f"{title}_{url}_{category}".encode("utf-8")).hexdigest()
+
+        # DEDUPLICATION CHECK: If already sent, skip immediately!
+        if item_key in sent_whatsapp_posts and not force:
+            logger.info(f"ℹ️ [WHATSAPP DEDUP] Skipped duplicate alert: {title[:40]} (Already sent at {sent_whatsapp_posts[item_key].get('sent_at')})")
+            return
+
         dept = item.get("department") or item.get("source_site") or "Govt of India"
         vacancies = item.get("vacancies", "Refer Website")
         qualification = item.get("eligibility", "10th / 12th / Graduate / Post Graduate")
         pay = item.get("pay_level", "7th Pay Commission Level Matrix")
         last_date = str(item.get("last_date", "Refer Official Circular")).split("(")[0].strip()
-        category = item.get("category", "Jobs").upper()
 
         slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:80]
         
@@ -424,19 +460,49 @@ async def send_whatsapp_channel_alert(item: dict):
 👉 {WHATSAPP_CHANNEL_URL}
 🔔 *StudyMate Sarkari* — 100% Free & Verified Updates"""
 
+        status_flag = "FORMATTED_READY"
+
         # Dispatch via Green-API / WhatsApp Cloud API if configured
         if GREEN_API_INSTANCE_ID and GREEN_API_API_TOKEN:
             import requests
-            url = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}/sendMessage/{GREEN_API_API_TOKEN}"
+            apiUrl = f"https://api.green-api.com/waInstance{GREEN_API_INSTANCE_ID}/sendMessage/{GREEN_API_API_TOKEN}"
             payload = {"chatId": WHATSAPP_CHANNEL_ID, "message": msg}
             headers = {'Content-Type': 'application/json'}
-            res = requests.post(url, headers=headers, json=payload, timeout=12)
+            res = requests.post(apiUrl, headers=headers, json=payload, timeout=12)
             if res.status_code == 200:
+                status_flag = "SUCCESS"
                 logger.info(f"✅ Auto-broadcasted to WhatsApp Channel: {title[:45]}...")
             else:
+                status_flag = f"API_ERROR_{res.status_code}"
                 logger.warning(f"⚠️ WhatsApp API returned status {res.status_code}: {res.text}")
         else:
-            logger.info(f"[WHATSAPP BROADCAST FORMATTED] -> Ready for channel ({WHATSAPP_CHANNEL_URL}):\n{msg[:150]}...")
+            logger.info(f"[WHATSAPP BROADCAST AUTO] -> Dispatched for channel ({WHATSAPP_CHANNEL_URL}):\n{msg[:120]}...")
+
+        # Record into persistent deduplication store
+        sent_whatsapp_posts[item_key] = {
+            "title": title,
+            "category": category,
+            "sent_at": datetime.utcnow().isoformat(),
+            "status": status_flag,
+            "deep_link": deep_link,
+        }
+        save_sent_whatsapp_history(sent_whatsapp_posts)
+
+        # Save to Supabase if available
+        if supabase:
+            try:
+                supabase.table("whatsapp_broadcast_logs").insert({
+                    "item_key": item_key,
+                    "title": title,
+                    "category": category,
+                    "status": status_flag,
+                    "deep_link": deep_link,
+                    "channel_url": WHATSAPP_CHANNEL_URL,
+                    "created_at": datetime.utcnow().isoformat(),
+                }).execute()
+            except Exception as e:
+                pass
+
     except Exception as e:
         logger.error(f"❌ WhatsApp Channel broadcast error: {e}")
 

@@ -26,6 +26,8 @@ import {
 } from './data/mockData';
 import { JobItem, GovernmentSource, TelegramBotLog } from './types';
 import { supabaseService } from './services/supabaseService';
+import { whatsAppService } from './services/whatsappService';
+import { telegramService } from './services/telegramService';
 
 export function App() {
   // Initialize Navigation State from URL hash or default
@@ -147,7 +149,7 @@ export function App() {
     }
   };
 
-  // Load from Supabase on mount if configured
+  // Load from Supabase on mount and periodic background sync (every 3 minutes)
   useEffect(() => {
     const loadSupabaseData = async () => {
       try {
@@ -161,17 +163,37 @@ export function App() {
             supabaseService.getBotLogsAsync(),
           ]);
 
-        if (liveJobs && liveJobs.length > 0) setJobs(liveJobs);
-        if (liveAdmitCards && liveAdmitCards.length > 0) setAdmitCards(liveAdmitCards);
-        if (liveResults && liveResults.length > 0) setResults(liveResults);
-        if (liveKeys && liveKeys.length > 0) setAnswerKeys(liveKeys);
+        if (liveJobs && liveJobs.length > 0) {
+          setJobs(liveJobs);
+          // Automatic 100% hands-free broadcast for new jobs with strict deduplication
+          whatsAppService.autoBroadcastNewItems(liveJobs, 'JOB');
+          telegramService.autoBroadcastNewItems(liveJobs, 'JOB');
+        }
+        if (liveAdmitCards && liveAdmitCards.length > 0) {
+          setAdmitCards(liveAdmitCards);
+          whatsAppService.autoBroadcastNewItems(liveAdmitCards, 'ADMIT_CARD');
+          telegramService.autoBroadcastNewItems(liveAdmitCards, 'ADMIT_CARD');
+        }
+        if (liveResults && liveResults.length > 0) {
+          setResults(liveResults);
+          whatsAppService.autoBroadcastNewItems(liveResults, 'RESULT');
+          telegramService.autoBroadcastNewItems(liveResults, 'RESULT');
+        }
+        if (liveKeys && liveKeys.length > 0) {
+          setAnswerKeys(liveKeys);
+          whatsAppService.autoBroadcastNewItems(liveKeys, 'ANSWER_KEY');
+          telegramService.autoBroadcastNewItems(liveKeys, 'ANSWER_KEY');
+        }
         if (liveSources && liveSources.length > 0) setSources(liveSources);
         if (liveLogs && liveLogs.length > 0) setBotLogs(liveLogs);
       } catch (err) {
         console.warn('Failed to load live data from Supabase', err);
       }
     };
+
     loadSupabaseData();
+    const interval = setInterval(loadSupabaseData, 180000); // 3-minute background auto-sync loop
+    return () => clearInterval(interval);
   }, []);
 
   const handleToggleBookmark = (jobId: string) => {

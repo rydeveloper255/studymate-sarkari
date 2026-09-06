@@ -165,3 +165,64 @@ export interface TelegramBotLog {
   messageType: 'INFO' | 'SUCCESS' | 'SCRAPE_DISCOVERY' | 'TELEGRAM_BROADCAST' | 'ERROR';
   details: string;
 }
+
+export interface WhatsAppBroadcastRecord {
+  id: string;
+  itemId: string;
+  category: 'JOB' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY' | 'NOTIFICATION' | 'DIGEST' | 'DEADLINE_URGENT';
+  title: string;
+  department?: string;
+  sentAt: string;
+  status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'SKIPPED_DUPLICATE';
+  channelUrl: string;
+  formattedText?: string;
+  autoBroadcasted: boolean;
+  deepLink?: string;
+  pdfUrl?: string;
+  utmParams?: string;
+  bannerGenerated?: boolean;
+  gatewayUsed?: 'GREEN_API' | 'META_CLOUD_API' | 'WEBHOOK_FALLBACK' | 'SIMULATOR';
+}
+
+export interface WhatsAppBannerConfig {
+  title: string;
+  department: string;
+  vacancies: string;
+  eligibility: string;
+  payScale: string;
+  lastDate: string;
+  stateOrCentral: string;
+  badgeType: 'NEW_JOB' | 'LAST_DATE' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY';
+}
+
+export interface TelegramBroadcastRecord {
+  id: string;
+  itemId: string;
+  category: 'JOB' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY' | 'NOTIFICATION' | 'DIGEST' | 'DEADLINE_URGENT';
+  title: string;
+  department?: string;
+  sentAt: string;
+  status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'SKIPPED_DUPLICATE';
+  channelUrl: string;
+  formattedText?: string;
+  htmlText?: string;
+  autoBroadcasted: boolean;
+  deepLink?: string;
+  pdfUrl?: string;
+  utmParams?: string;
+  bannerGenerated?: boolean;
+  channelHandle?: string;
+}
+
+export interface TelegramBannerConfig {
+  title: string;
+  department: string;
+  vacancies: string;
+  eligibility: string;
+  payScale: string;
+  lastDate: string;
+  stateOrCentral: string;
+  badgeType: 'NEW_JOB' | 'LAST_DATE' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY';
+}
+
+

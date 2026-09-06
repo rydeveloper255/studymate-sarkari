@@ -43,13 +43,31 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
 
   // Web Share and Social Helpers
   const getShareUrl = () => {
-    return `${window.location.origin}${window.location.pathname}#job-detail?id=${job.id}`;
+    return `${window.location.origin}${window.location.pathname}#job-detail?id=${job.id}&utm_source=whatsapp_share&utm_medium=user_share&utm_campaign=job_referral`;
   };
 
   const getShareText = () => {
     const lastDateClean = job.lastDate ? job.lastDate.split('(')[0].trim() : 'Check Details';
-    return `📢 *${job.title}*\n🏛️ Dept: ${job.department}\n🎯 Total Posts: ${job.vacanciesFormatted} Vacancies\n📅 Last Date: ${lastDateClean}\n💰 Pay Scale: ${job.payLevel}\n\n🔗 View Full Details & Apply Online:\n`;
+    return `📢 *NEW SARKARI RECRUITMENT 2025-26* 🇮🇳
+📌 *${job.title}*
+
+🏛️ *Dept:* ${job.department}
+🎯 *Total Vacancies:* ${job.vacanciesFormatted} Posts
+🎓 *Qualification:* ${job.qualificationSummary || '10th / 12th / Graduate'}
+💰 *Pay Scale:* ${job.payLevel}
+📅 *Last Date:* ${lastDateClean}
+
+🔗 *Direct Apply Online & Notification:*
+👇👇👇
+${getShareUrl()}
+
+📲 *Join Official Telegram Channel for 24x7 Alerts:*
+👉 https://t.me/Sarkariupdatealerts
+
+💬 *Join Official WhatsApp Channel:*
+👉 https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z`;
   };
+
 
   const handleNativeShare = async () => {
     const url = getShareUrl();

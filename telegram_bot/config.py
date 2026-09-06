@@ -23,7 +23,9 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 # Telegram Admin ID (Configured to 5165363865 for instant direct alerts)
 TELEGRAM_ADMIN_ID = os.getenv("TELEGRAM_ADMIN_ID", "5165363865")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "5165363865")
-TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "5165363865")
+TELEGRAM_CHANNEL_ID = os.getenv("TELEGRAM_CHANNEL_ID", "@Sarkariupdatealerts")
+TELEGRAM_CHANNEL_URL = os.getenv("TELEGRAM_CHANNEL_URL", "https://t.me/Sarkariupdatealerts")
+TELEGRAM_CHANNEL_HANDLE = os.getenv("TELEGRAM_CHANNEL_HANDLE", "@Sarkariupdatealerts")
 
 # WhatsApp Official Channel & API Configuration
 WHATSAPP_CHANNEL_URL = os.getenv("WHATSAPP_CHANNEL_URL", "https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z")

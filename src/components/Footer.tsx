@@ -14,7 +14,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram, isAd
     if (onOpenTelegram) {
       onOpenTelegram();
     } else {
-      window.open('https://t.me/StudyMateSarkariLive', '_blank', 'noopener,noreferrer');
+      window.open('https://t.me/Sarkariupdatealerts', '_blank', 'noopener,noreferrer');
     }
   };
   return (

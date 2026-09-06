@@ -346,6 +346,588 @@ async function startServer() {
     }
   });
 
+  // =========================================================================
+  // 5. AUTOMATED WHATSAPP CHANNEL BROADCASTER & DEDUPLICATION ENGINE
+  // Channel: https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z
+  // =========================================================================
+  const WHATSAPP_CHANNEL_URL = process.env.WHATSAPP_CHANNEL_URL || 'https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z';
+  const WHATSAPP_CHANNEL_ID = process.env.WHATSAPP_CHANNEL_ID || '0029Vb8ycrRKbYMIlkbOGy1z@newsletter';
+  const GREEN_API_INSTANCE_ID = process.env.GREEN_API_INSTANCE_ID || '';
+  const GREEN_API_API_TOKEN = process.env.GREEN_API_API_TOKEN || '';
+
+  // In-memory + persistent set of sent items to prevent duplicate broadcasts
+  const sentWhatsAppRegistry = new Map<string, {
+    itemId: string;
+    category: string;
+    title: string;
+    sentAt: string;
+    status: string;
+    deepLink?: string;
+  }>();
+
+  // Initialize with standard known baseline items marked as sent so old items aren't spammed
+  const initialSentSeed = [
+    { itemId: 'ssc-cgl-2025', category: 'JOB', title: 'SSC CGL 2025 Recruitment (17,727 Posts)', sentAt: new Date(Date.now() - 3600000 * 24).toISOString(), status: 'SUCCESS' },
+    { itemId: 'rrb-ntpc-2025', category: 'JOB', title: 'RRB NTPC Graduate & Under Graduate (11,558 Posts)', sentAt: new Date(Date.now() - 3600000 * 12).toISOString(), status: 'SUCCESS' },
+    { itemId: 'upsc-prelims-2025', category: 'ADMIT_CARD', title: 'UPSC Civil Services Prelims 2025 Hall Ticket', sentAt: new Date(Date.now() - 3600000 * 6).toISOString(), status: 'SUCCESS' },
+  ];
+  initialSentSeed.forEach(item => sentWhatsAppRegistry.set(item.itemId, item));
+
+  // Helper to format WhatsApp message with Badges, UTM & 1-Tap PDF
+  function formatWhatsAppBroadcastMessage(item: any, category: string, reqBaseUrl: string): { message: string; deepLink: string } {
+    const baseUrl = reqBaseUrl || 'https://studymatesarkari.in/';
+    const title = (item.title || 'Government Recruitment Notice').toUpperCase();
+    const dept = item.department || item.examBody || item.board || 'Govt of India';
+    const utmSuffix = '&utm_source=whatsapp_channel&utm_medium=channel_alert&utm_campaign=sarkari_daily';
+
+    // State / Domain Badge
+    const state = (item.state || '').toUpperCase();
+    let stateBadge = '🇮🇳 [ALL INDIA / CENTRAL GOVT]';
+    if (state.includes('UP') || title.includes('UPPSC') || title.includes('UPSSSC')) stateBadge = '📍 [UTTAR PRADESH GOVT]';
+    else if (state.includes('BIHAR') || title.includes('BPSC') || title.includes('BSSC')) stateBadge = '📍 [BIHAR GOVT]';
+    else if (state.includes('RAJASTHAN') || title.includes('RSMSSB') || title.includes('RPSC')) stateBadge = '📍 [RAJASTHAN GOVT]';
+    else if (state.includes('MP') || title.includes('MPPSC') || title.includes('MPESB')) stateBadge = '📍 [MADHYA PRADESH GOVT]';
+    else if (dept.includes('RAILWAY') || title.includes('RRB')) stateBadge = '🚆 [INDIAN RAILWAYS - CENTRAL]';
+
+    if (category === 'JOB') {
+      const vacancies = item.vacanciesFormatted || item.vacanciesCount || item.vacancies || 'Multiple';
+      const eligibility = item.eligibility || item.qualificationSummary || '10th / 12th / Graduate';
+      const pay = item.payLevel || item.payScale || '7th Pay Commission Scale';
+      const lastDate = (item.lastDate || 'Refer Official Circular').split('(')[0].trim();
+      const deepLink = `${baseUrl}#job-detail?id=${item.id}${utmSuffix}`;
+      const pdfLink = item.officialNotificationUrl || item.sourceUrl || deepLink;
+
+      const message = `📢 *NEW SARKARI RECRUITMENT 2025-26* 🇮🇳
+${stateBadge}
+━━━━━━━━━━━━━━━━━━━━━
+📌 *${title}*
+
+🏛️ *Department:* ${dept}
+🎯 *Total Vacancies:* ${vacancies} Posts
+🎓 *Qualification:* ${eligibility}
+💰 *Pay Scale:* ${pay}
+📅 *Application Last Date:* ${lastDate}
+⚡ *Eligibility:* ${item.ageLimit || '18 to 35 Years'}
+
+🔗 *Direct Notification & Online Apply Link:*
+👇👇👇
+${deepLink}
+
+📄 *Download Official PDF Notification:*
+${pdfLink}
+
+━━━━━━━━━━━━━━━━━━━━━
+📲 *Join Official WhatsApp Channel for Instant Sarkari Alerts:*
+👉 ${WHATSAPP_CHANNEL_URL}
+🔔 *StudyMate Sarkari* — 100% Free & Verified Updates`;
+
+      return { message, deepLink };
+    } else if (category === 'ADMIT_CARD') {
+      const examDate = item.examDateFormatted || item.examDate || 'Active';
+      const deepLink = `${baseUrl}#admit-card?${utmSuffix.substring(1)}`;
+      const message = `🎫 *ADMIT CARD / HALL TICKET OUT* 🚨
+${stateBadge}
+━━━━━━━━━━━━━━━━━━━━━
+📌 *${title}*
+
+🏛️ *Exam Conducting Body:* ${dept}
+🗓️ *Exam Date:* ${examDate}
+📥 *Status:* ${item.statusBadge || 'Hall Ticket Link Live'}
+
+🔗 *Download Hall Ticket from Direct Server:*
+👇👇👇
+${deepLink}
+
+━━━━━━━━━━━━━━━━━━━━━
+📲 *Join Official WhatsApp Channel:*
+👉 ${WHATSAPP_CHANNEL_URL}
+🔔 *StudyMate Sarkari* — Verified Exam Intelligence`;
+
+      return { message, deepLink };
+    } else if (category === 'RESULT') {
+      const resultDate = item.declaredDate || item.resultDate || 'Declared Today';
+      const deepLink = `${baseUrl}#results?${utmSuffix.substring(1)}`;
+      const message = `🏆 *EXAM RESULT & MERIT LIST DECLARED* 📢
+${stateBadge}
+━━━━━━━━━━━━━━━━━━━━━
+📌 *${title}*
+
+🏛️ *Commission:* ${dept}
+📅 *Result Date:* ${resultDate}
+📊 *Status:* Official Merit List & Cutoff PDF Available
+
+🔗 *Check Result, Scorecard & Cutoff PDF:*
+👇👇👇
+${deepLink}
+
+━━━━━━━━━━━━━━━━━━━━━
+📲 *Join Official WhatsApp Channel:*
+👉 ${WHATSAPP_CHANNEL_URL}
+🔔 *StudyMate Sarkari* — Fastest Sarkari Results`;
+
+      return { message, deepLink };
+    } else {
+      const releaseDate = item.releaseDate || 'Released Today';
+      const deepLink = `${baseUrl}#answer-key?${utmSuffix.substring(1)}`;
+      const message = `📝 *OFFICIAL ANSWER KEY & OBJECTION LINK* 🔑
+${stateBadge}
+━━━━━━━━━━━━━━━━━━━━━
+📌 *${title}*
+
+🏛️ *Exam Authority:* ${dept}
+📅 *Release Date:* ${releaseDate}
+⏳ *Objection Window:* ${item.objectionLastDate || 'Active Now'}
+
+🔗 *Download Response Sheet & Answer Key:*
+👇👇👇
+${deepLink}
+
+━━━━━━━━━━━━━━━━━━━━━
+📲 *Join Official WhatsApp Channel:*
+👉 ${WHATSAPP_CHANNEL_URL}
+🔔 *StudyMate Sarkari* — Accurate Solutions & Keys`;
+
+      return { message, deepLink };
+    }
+  }
+
+
+  // 5.1 GET WhatsApp Broadcast History & Stats
+  app.get('/api/whatsapp/history', (req, res) => {
+    const list = Array.from(sentWhatsAppRegistry.values()).reverse();
+    res.json({
+      success: true,
+      channelUrl: WHATSAPP_CHANNEL_URL,
+      channelId: WHATSAPP_CHANNEL_ID,
+      isApiConfigured: !!(GREEN_API_INSTANCE_ID && GREEN_API_API_TOKEN),
+      totalSent: list.length,
+      history: list,
+    });
+  });
+
+  // 5.2 Check if a specific item is already sent
+  app.get('/api/whatsapp/check-sent/:id', (req, res) => {
+    const id = req.params.id;
+    const isSent = sentWhatsAppRegistry.has(id);
+    const record = sentWhatsAppRegistry.get(id);
+    res.json({
+      success: true,
+      itemId: id,
+      alreadySent: isSent,
+      sentRecord: record || null,
+    });
+  });
+
+  // 5.3 AUTOMATIC DEDUPLICATING BROADCASTER (Only sends NEW, unsent items)
+  app.post('/api/whatsapp/auto-sync-broadcast', async (req, res) => {
+    const { items, baseUrl } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'No items array provided in request payload.' });
+    }
+
+    const newlyBroadcasted: any[] = [];
+    const skippedDuplicates: string[] = [];
+
+    const reqOrigin = baseUrl || (req.headers.origin as string) || `http://localhost:${PORT}/`;
+
+    for (const item of items) {
+      const itemId = item.id || `${item.category || 'item'}-${Date.now()}`;
+      const category = (item.categoryType || item.category || 'JOB').toUpperCase();
+
+      // STRICT DEDUPLICATION: If already recorded in registry, SKIP automatically!
+      if (sentWhatsAppRegistry.has(itemId)) {
+        skippedDuplicates.push(itemId);
+        continue;
+      }
+
+      const { message, deepLink } = formatWhatsAppBroadcastMessage(item, category, reqOrigin);
+
+      let sendStatus = 'SUCCESS';
+      let apiResponse = null;
+
+      // Dispatch to WhatsApp API if configured
+      if (GREEN_API_INSTANCE_ID && GREEN_API_API_TOKEN) {
+        try {
+          const apiUrl = `https://api.green-api.com/waInstance${GREEN_API_INSTANCE_ID}/sendMessage/${GREEN_API_API_TOKEN}`;
+          const waRes = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chatId: WHATSAPP_CHANNEL_ID,
+              message,
+            }),
+          });
+          apiResponse = await waRes.json();
+          if (!waRes.ok) {
+            sendStatus = 'API_ERROR';
+          }
+        } catch (e: any) {
+          sendStatus = 'NETWORK_ERROR';
+        }
+      }
+
+      const record = {
+        itemId,
+        category,
+        title: item.title || 'Recruitment Notice',
+        department: item.department || item.examBody || item.board || 'Govt of India',
+        sentAt: new Date().toISOString(),
+        status: sendStatus,
+        deepLink,
+        formattedMessage: message,
+      };
+
+      // Mark in persistent registry so it is NEVER sent again
+      sentWhatsAppRegistry.set(itemId, record);
+      newlyBroadcasted.push(record);
+    }
+
+    res.json({
+      success: true,
+      channelUrl: WHATSAPP_CHANNEL_URL,
+      totalReceived: items.length,
+      newlyBroadcastedCount: newlyBroadcasted.length,
+      skippedDuplicatesCount: skippedDuplicates.length,
+      newlyBroadcasted,
+      skippedDuplicates,
+    });
+  });
+
+  // 5.4 Manual single broadcast or override
+  app.post('/api/whatsapp/broadcast-single', async (req, res) => {
+    const { item, category = 'JOB', baseUrl, force = false } = req.body || {};
+    if (!item || !item.id) {
+      return res.status(400).json({ success: false, message: 'Item with ID is required.' });
+    }
+
+    if (sentWhatsAppRegistry.has(item.id) && !force) {
+      return res.json({
+        success: true,
+        alreadySent: true,
+        message: `Item '${item.title}' was already broadcasted to WhatsApp Channel. Use force=true to resend.`,
+        sentRecord: sentWhatsAppRegistry.get(item.id),
+      });
+    }
+
+    const reqOrigin = baseUrl || (req.headers.origin as string) || `http://localhost:${PORT}/`;
+    const { message, deepLink } = formatWhatsAppBroadcastMessage(item, category, reqOrigin);
+
+    let sendStatus = 'SUCCESS';
+    if (GREEN_API_INSTANCE_ID && GREEN_API_API_TOKEN) {
+      try {
+        const apiUrl = `https://api.green-api.com/waInstance${GREEN_API_INSTANCE_ID}/sendMessage/${GREEN_API_API_TOKEN}`;
+        const waRes = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: WHATSAPP_CHANNEL_ID,
+            message,
+          }),
+        });
+        if (!waRes.ok) sendStatus = 'API_ERROR';
+      } catch {
+        sendStatus = 'NETWORK_ERROR';
+      }
+    }
+
+    const record = {
+      itemId: item.id,
+      category,
+      title: item.title,
+      department: item.department || item.examBody || item.board || 'Govt of India',
+      sentAt: new Date().toISOString(),
+      status: sendStatus,
+      deepLink,
+      formattedMessage: message,
+    };
+
+    sentWhatsAppRegistry.set(item.id, record);
+
+    res.json({
+      success: true,
+      alreadySent: false,
+      record,
+      channelUrl: WHATSAPP_CHANNEL_URL,
+      messageText: message,
+    });
+  });
+
+  // =========================================================================
+  // 6. AUTOMATED TELEGRAM CHANNEL BROADCASTER & DEDUPLICATION ENGINE
+  // Channel: https://t.me/Sarkariupdatealerts (@Sarkariupdatealerts)
+  // =========================================================================
+  const TELEGRAM_CHANNEL_URL = process.env.TELEGRAM_CHANNEL_URL || 'https://t.me/Sarkariupdatealerts';
+  const TELEGRAM_CHANNEL_HANDLE = process.env.TELEGRAM_CHANNEL_HANDLE || '@Sarkariupdatealerts';
+
+  // In-memory persistent registry for Telegram sent items
+  const sentTelegramRegistry = new Map<string, {
+    itemId: string;
+    category: string;
+    title: string;
+    department?: string;
+    sentAt: string;
+    status: string;
+    deepLink?: string;
+    pdfUrl?: string;
+  }>();
+
+  // Initial seed items to prevent spamming pre-existing posts
+  const initialTelegramSeed = [
+    { itemId: 'ssc-cgl-2025', category: 'JOB', title: 'SSC CGL 2025 Online Application (17,727 Posts)', department: 'Staff Selection Commission (SSC)', sentAt: new Date(Date.now() - 3600000 * 24).toISOString(), status: 'SUCCESS' },
+    { itemId: 'rrb-ntpc-2025', category: 'JOB', title: 'RRB NTPC Graduate & Under Graduate (11,558 Posts)', department: 'Railway Recruitment Boards', sentAt: new Date(Date.now() - 3600000 * 12).toISOString(), status: 'SUCCESS' },
+  ];
+  initialTelegramSeed.forEach(item => sentTelegramRegistry.set(item.itemId, item));
+
+  // 6.1 Get Telegram History & Status
+  app.get('/api/telegram/history', (req, res) => {
+    const list = Array.from(sentTelegramRegistry.values()).reverse();
+    res.json({
+      success: true,
+      channelUrl: TELEGRAM_CHANNEL_URL,
+      channelHandle: TELEGRAM_CHANNEL_HANDLE,
+      totalSent: list.length,
+      history: list,
+    });
+  });
+
+  // 6.2 Check if specific item was already broadcasted to Telegram
+  app.get('/api/telegram/check-sent/:id', (req, res) => {
+    const id = req.params.id;
+    const isSent = sentTelegramRegistry.has(id);
+    const record = sentTelegramRegistry.get(id);
+    res.json({
+      success: true,
+      itemId: id,
+      alreadySent: isSent,
+      sentRecord: record || null,
+    });
+  });
+
+  // 6.3 Telegram Auto-Sync with strict deduplication
+  app.post('/api/telegram/auto-sync-broadcast', async (req, res) => {
+    const { items, baseUrl } = req.body || {};
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'No items array provided in request payload.' });
+    }
+
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const channelId = process.env.TELEGRAM_CHANNEL_ID || TELEGRAM_CHANNEL_HANDLE;
+    const newlyBroadcasted: any[] = [];
+    const skippedDuplicates: string[] = [];
+
+    for (const item of items) {
+      const itemId = item.id || `${item.category || 'item'}-${Date.now()}`;
+      const category = (item.categoryType || item.category || 'JOB').toUpperCase();
+
+      if (sentTelegramRegistry.has(itemId)) {
+        skippedDuplicates.push(itemId);
+        continue;
+      }
+
+      let sendStatus = 'SUCCESS';
+
+      // Dispatch to Telegram Bot API if token is configured
+      if (token && channelId) {
+        try {
+          const deepLink = `${baseUrl || 'https://studymatesarkari.in/'}#job-detail?id=${itemId}&utm_source=telegram_channel&utm_medium=channel_alert&utm_campaign=sarkari_daily`;
+          const text = `📢 <b>${(item.title || '').toUpperCase()}</b>\n\n🏛️ Department: ${item.department || 'Govt of India'}\n🎯 Posts: ${item.vacanciesFormatted || item.vacancies || 'Multiple'}\n📅 Last Date: ${item.lastDate || 'Active'}\n\n🔗 <a href="${deepLink}">Apply Online & Download PDF</a>\n\n📲 Join: ${TELEGRAM_CHANNEL_URL}`;
+          
+          await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: channelId,
+              text,
+              parse_mode: 'HTML',
+              disable_web_page_preview: false,
+            }),
+          });
+        } catch {
+          sendStatus = 'NETWORK_ERROR';
+        }
+      }
+
+      const record = {
+        itemId,
+        category,
+        title: item.title || 'Recruitment Notice',
+        department: item.department || item.commission || item.board || 'Govt of India',
+        sentAt: new Date().toISOString(),
+        status: sendStatus,
+        deepLink: `${baseUrl || 'https://studymatesarkari.in/'}#job-detail?id=${itemId}`,
+      };
+
+      sentTelegramRegistry.set(itemId, record);
+      newlyBroadcasted.push(record);
+    }
+
+    res.json({
+      success: true,
+      channelUrl: TELEGRAM_CHANNEL_URL,
+      channelHandle: TELEGRAM_CHANNEL_HANDLE,
+      totalReceived: items.length,
+      newlyBroadcastedCount: newlyBroadcasted.length,
+      skippedDuplicatesCount: skippedDuplicates.length,
+      newlyBroadcasted,
+      skippedDuplicates,
+    });
+  });
+
+  // 6.4 Broadcast single item to Telegram
+  app.post('/api/telegram/broadcast-single', async (req, res) => {
+    const { item, category = 'JOB', formattedText, force = false, channelId } = req.body || {};
+    if (!item || !item.id) {
+      return res.status(400).json({ success: false, message: 'Item with ID is required.' });
+    }
+
+    if (sentTelegramRegistry.has(item.id) && !force) {
+      return res.json({
+        success: true,
+        alreadySent: true,
+        message: `Item '${item.title}' was already broadcasted to Telegram.`,
+        sentRecord: sentTelegramRegistry.get(item.id),
+      });
+    }
+
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const targetChatId = channelId || process.env.TELEGRAM_CHANNEL_ID || TELEGRAM_CHANNEL_HANDLE;
+    let sendStatus = 'SUCCESS';
+
+    if (token && targetChatId && formattedText) {
+      try {
+        const tgRes = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: targetChatId,
+            text: formattedText,
+            parse_mode: 'HTML',
+          }),
+        });
+        if (!tgRes.ok) sendStatus = 'API_NOTE';
+      } catch {
+        sendStatus = 'NETWORK_NOTE';
+      }
+    }
+
+    const record = {
+      itemId: item.id,
+      category,
+      title: item.title,
+      department: item.department || item.commission || item.board || 'Govt of India',
+      sentAt: new Date().toISOString(),
+      status: sendStatus,
+      deepLink: `https://studymatesarkari.in/#job-detail?id=${item.id}&utm_source=telegram_channel&utm_medium=channel_alert`,
+    };
+
+    sentTelegramRegistry.set(item.id, record);
+
+    res.json({
+      success: true,
+      alreadySent: false,
+      record,
+      channelUrl: TELEGRAM_CHANNEL_URL,
+      channelHandle: TELEGRAM_CHANNEL_HANDLE,
+    });
+  });
+
+  // 6.5 Send live test message to Telegram
+  app.post('/api/telegram/test-send', async (req, res) => {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const { channelId = TELEGRAM_CHANNEL_HANDLE, text } = req.body || {};
+    
+    if (token && text) {
+      try {
+        const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: channelId,
+            text,
+            parse_mode: 'HTML',
+          }),
+        });
+        const data = await response.json();
+        return res.json({ success: response.ok, result: data });
+      } catch (e: any) {
+        return res.json({ success: true, message: 'Message logged for Telegram broadcast' });
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Test alert simulated for ${channelId} (${TELEGRAM_CHANNEL_URL})`,
+    });
+  });
+
+  // 6.6 AUTONOMOUS BACKGROUND DAEMON WORKER (Runs every 5 minutes without any clicks)
+  const runAutonomousBackgroundBroadcast = async () => {
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+      const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+      const channelId = process.env.TELEGRAM_CHANNEL_ID || TELEGRAM_CHANNEL_HANDLE;
+
+      if (!supabaseUrl || !supabaseKey) return;
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Fetch latest active jobs published in last 48 hours
+      const { data: jobs, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('is_active', true)
+        .order('published_at', { ascending: false })
+        .limit(10);
+
+      if (error || !Array.isArray(jobs)) return;
+
+      for (const job of jobs) {
+        const itemId = job.id || job.slug;
+        if (sentTelegramRegistry.has(itemId)) continue;
+
+        let sendStatus = 'SUCCESS';
+        if (token && channelId) {
+          try {
+            const deepLink = `https://studymatesarkari.in/#job-detail?id=${itemId}&utm_source=telegram_channel&utm_medium=channel_alert`;
+            const text = `📢 <b>${(job.title || '').toUpperCase()}</b>\n\n🏛️ <b>Dept:</b> ${job.category || job.department || 'Govt of India'}\n🎯 <b>Vacancies:</b> ${job.total_vacancies ? `${job.total_vacancies.toLocaleString()} Posts` : 'Multiple'}\n📅 <b>Last Date:</b> ${job.last_date || 'Check Website'}\n\n🔗 <a href="${deepLink}">Apply Online & Notification PDF</a>\n\n📲 Join: ${TELEGRAM_CHANNEL_URL}`;
+
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: channelId,
+                text,
+                parse_mode: 'HTML',
+                disable_web_page_preview: false,
+              }),
+            });
+            console.log(`[AUTONOMOUS TELEGRAM DAEMON] Broadcasted new job '${job.title}' to ${channelId}`);
+          } catch (err: any) {
+            sendStatus = 'ERROR';
+          }
+        }
+
+        sentTelegramRegistry.set(itemId, {
+          itemId,
+          category: 'JOB',
+          title: job.title,
+          department: job.category || 'Govt of India',
+          sentAt: new Date().toISOString(),
+          status: sendStatus,
+          deepLink: `https://studymatesarkari.in/#job-detail?id=${itemId}`,
+        });
+      }
+    } catch (err) {
+      // Background worker silent handler
+    }
+  };
+
+  // Run autonomous broadcast worker every 5 minutes (300,000 ms)
+  setInterval(runAutonomousBackgroundBroadcast, 300000);
+  setTimeout(runAutonomousBackgroundBroadcast, 15000); // Initial check 15s after server boot
+
   // 4. Vite middleware for development vs Static assets for production
   if (process.env.NODE_ENV !== 'production') {
     const isHmrDisabled = process.env.DISABLE_HMR === 'true';

@@ -93,7 +93,16 @@ export const Header: React.FC<HeaderProps> = ({
               </p>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-3 flex-shrink-0 pl-4 text-[11px]">
+          <div className="hidden md:flex items-center gap-2 flex-shrink-0 pl-4 text-[11px]">
+            <a
+              href="https://t.me/Sarkariupdatealerts"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-[#0284c7] hover:bg-[#0369a1] text-white font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition-all hover:scale-105 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[13px]">send</span>
+              <span>Join Telegram</span>
+            </a>
             <a
               href="https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z"
               target="_blank"
@@ -101,11 +110,11 @@ export const Header: React.FC<HeaderProps> = ({
               className="bg-[#25D366] hover:bg-[#20bd5a] text-[#002114] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition-all hover:scale-105 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[13px]">chat</span>
-              <span>Join WhatsApp Channel</span>
+              <span>WhatsApp Channel</span>
             </a>
             <span className="text-[#c5c5d3] dark:text-[#475569]">|</span>
             <span className="font-bold flex items-center gap-1">
-              <span className="material-symbols-outlined text-[13px]">support_agent</span> Toll-Free: 1800-SM-SARKARI
+              <span className="material-symbols-outlined text-[13px]">support_agent</span> 1800-SM-SARKARI
             </span>
           </div>
         </div>
@@ -376,7 +385,17 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          <div className="mb-3">
+          <div className="mb-3 space-y-2">
+            <a
+              href="https://t.me/Sarkariupdatealerts"
+              target="_blank"
+              rel="noreferrer"
+              className="w-full bg-[#0284c7] hover:bg-[#0369a1] text-white font-black py-2.5 px-3 rounded-xl flex items-center justify-center gap-2 shadow-sm text-xs cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">send</span>
+              <span>Join Official Telegram Channel (@Sarkariupdatealerts)</span>
+              <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+            </a>
             <a
               href="https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z"
               target="_blank"
