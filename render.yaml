@@ -1,0 +1,80 @@
+# ==============================================================================
+# Render.com Blueprint Configuration (render.yaml)
+# StudyMate Sarkari - Official Govt Job Portal & Automated Telegram Bot
+# ==============================================================================
+# Deploy Instructions:
+# 1. Connect your GitHub repository to Render (https://render.com)
+# 2. Render automatically detects this render.yaml and creates:
+#    - A Web Service (Frontend + Express API Server)
+#    - A 24/7 Background Worker (Python Telegram Bot & Govt Web Crawler)
+# 3. Fill in your environment variables in the Render Dashboard!
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. WEB SERVICE: React 19 Frontend + Express Production Server
+  # ----------------------------------------------------------------------------
+  - type: web
+    name: studymate-sarkari-web
+    env: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Supabase Credentials (set in Render Dashboard)
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      # Telegram Credentials
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      # Admin Telegram ID (configured as 5165363865)
+      - key: TELEGRAM_ADMIN_ID
+        value: "5165363865"
+      - key: TELEGRAM_CHAT_ID
+        value: "5165363865"
+
+  # ----------------------------------------------------------------------------
+  # 2. BACKGROUND WORKER: Python Telegram Bot & 1-Hour Automated Scraper
+  # ----------------------------------------------------------------------------
+  - type: worker
+    name: studymate-sarkari-bot
+    env: python
+    plan: free
+    region: oregon
+    buildCommand: pip install -r telegram_bot/requirements.txt
+    startCommand: python telegram_bot/bot.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10.12"
+      # Telegram Bot Token from @BotFather
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      # Admin Telegram ID - Alerts are directly sent here
+      - key: TELEGRAM_ADMIN_ID
+        value: "5165363865"
+      - key: TELEGRAM_CHAT_ID
+        value: "5165363865"
+      - key: TELEGRAM_CHANNEL_ID
+        value: "5165363865"
+      # Supabase Connection
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Hourly Crawler Schedule
+      - key: SCRAPING_INTERVAL_HOURS
+        value: "1"

@@ -1,0 +1,6 @@
+{
+  "name": "StudyMate Sarkari",
+  "description": "Official Government Jobs, Vacancy Notifications, Admit Cards, Results, and Answer Keys Portal with Telegram Bot & Supabase Scraper Integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
