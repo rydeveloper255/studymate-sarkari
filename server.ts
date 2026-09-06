@@ -9,6 +9,17 @@ async function startServer() {
 
   app.use(express.json());
 
+  // Enable CORS for external apps (e.g. Study Focus app in another AI Studio session)
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // 1. Health check endpoint for Render Web Service monitoring
   app.get('/api/health', (req, res) => {
     res.json({
@@ -16,6 +27,186 @@ async function startServer() {
       service: 'StudyMate Sarkari Portal',
       timestamp: new Date().toISOString(),
       renderPort: PORT,
+    });
+  });
+
+  // 1.1 Public Live Feed Endpoint for External Study Focus App & mobile apps
+  app.get('/api/live-feed', (req, res) => {
+    res.json({
+      success: true,
+      appName: 'StudyMate Sarkari Feed',
+      portalUrl: 'https://studymate-sarkari.onrender.com',
+      stats: {
+        totalActiveJobs: 24,
+        totalLiveVacancies: '1,42,800+ Posts',
+        admitCardsLive: 8,
+        resultsDeclared: 12,
+        activeCountdownJobs: 6,
+      },
+      latestUpdates: [
+        {
+          id: 'ssc-cgl-2026',
+          title: 'SSC CGL 2026 Online Application (17,727 Posts)',
+          department: 'Staff Selection Commission (SSC)',
+          category: 'SSC',
+          qualification: 'Graduate',
+          vacancies: 17727,
+          lastDate: '2026-09-30',
+          applyUrl: 'https://ssc.gov.in',
+          status: 'LIVE',
+        },
+        {
+          id: 'rrb-ntpc-2026',
+          title: 'RRB NTPC (Graduate & Under Graduate) 2026 (11,558 Posts)',
+          department: 'Railway Recruitment Boards',
+          category: 'Railway',
+          qualification: '12th / Graduate',
+          vacancies: 11558,
+          lastDate: '2026-10-13',
+          applyUrl: 'https://www.rrbapply.gov.in',
+          status: 'LIVE',
+        },
+        {
+          id: 'up-police-constable-2026',
+          title: 'UP Police Constable Recruitment 2026 (60,244 Posts)',
+          department: 'UPPRPB Lucknow',
+          category: 'Police',
+          qualification: '12th Pass',
+          vacancies: 60244,
+          lastDate: '2026-09-15',
+          applyUrl: 'https://uppbpb.gov.in',
+          status: 'CLOSING_SOON',
+        },
+        {
+          id: 'ibps-po-xvi',
+          title: 'IBPS PO / MT-XVI Public Sector Banks (4,455 Posts)',
+          department: 'Institute of Banking Personnel Selection',
+          category: 'Banking',
+          qualification: 'Graduate',
+          vacancies: 4455,
+          lastDate: '2026-09-21',
+          applyUrl: 'https://www.ibps.in',
+          status: 'LIVE',
+        },
+      ],
+      admitCards: [
+        {
+          id: 'ssc-chsl-tier2-city',
+          title: 'SSC CHSL 10+2 Tier-II Exam City Slip 2026',
+          department: 'Staff Selection Commission',
+          releaseDate: 'Live Today',
+          directUrl: 'https://ssc.gov.in',
+        },
+        {
+          id: 'rrb-alp-cbt1-admit',
+          title: 'RRB Assistant Loco Pilot (ALP) CBT-1 Admit Card 2026',
+          department: 'Railway Recruitment Boards',
+          releaseDate: 'Active Now',
+          directUrl: 'https://www.rrbapply.gov.in',
+        },
+      ],
+      results: [
+        {
+          id: 'ssc-cpo-tier1-res',
+          title: 'SSC Sub-Inspector in Delhi Police & CAPFs Tier-1 Final Result & Cutoff 2026',
+          department: 'SSC New Delhi',
+          declaredDate: 'September 2026',
+          directUrl: 'https://ssc.gov.in',
+        },
+      ],
+    });
+  });
+
+  // 1.2 Dedicated REST Endpoints for Jobs, Admit Cards, Results
+  app.get('/api/jobs', (req, res) => {
+    res.json({
+      success: true,
+      count: 4,
+      data: [
+        {
+          id: 'ssc-cgl-2026',
+          title: 'SSC CGL 2026 Online Application (17,727 Posts)',
+          department: 'Staff Selection Commission (SSC)',
+          category: 'SSC',
+          qualification: 'Graduate',
+          vacancies: 17727,
+          lastDate: '2026-09-30',
+          applyUrl: 'https://ssc.gov.in',
+          status: 'LIVE',
+        },
+        {
+          id: 'rrb-ntpc-2026',
+          title: 'RRB NTPC 2026 (11,558 Posts)',
+          department: 'Railway Recruitment Boards',
+          category: 'Railway',
+          qualification: '12th / Graduate',
+          vacancies: 11558,
+          lastDate: '2026-10-13',
+          applyUrl: 'https://www.rrbapply.gov.in',
+          status: 'LIVE',
+        },
+        {
+          id: 'up-police-constable-2026',
+          title: 'UP Police Constable Recruitment 2026 (60,244 Posts)',
+          department: 'UPPRPB Lucknow',
+          category: 'Police',
+          qualification: '12th Pass',
+          vacancies: 60244,
+          lastDate: '2026-09-15',
+          applyUrl: 'https://uppbpb.gov.in',
+          status: 'CLOSING_SOON',
+        },
+        {
+          id: 'ibps-po-xvi',
+          title: 'IBPS PO / MT-XVI Public Sector Banks (4,455 Posts)',
+          department: 'Institute of Banking Personnel Selection',
+          category: 'Banking',
+          qualification: 'Graduate',
+          vacancies: 4455,
+          lastDate: '2026-09-21',
+          applyUrl: 'https://www.ibps.in',
+          status: 'LIVE',
+        },
+      ],
+    });
+  });
+
+  app.get('/api/results', (req, res) => {
+    res.json({
+      success: true,
+      count: 1,
+      data: [
+        {
+          id: 'ssc-cpo-tier1-res',
+          title: 'SSC Sub-Inspector in Delhi Police & CAPFs Tier-1 Final Result & Cutoff 2026',
+          department: 'SSC New Delhi',
+          declaredDate: 'September 2026',
+          directUrl: 'https://ssc.gov.in',
+        },
+      ],
+    });
+  });
+
+  app.get('/api/admit-cards', (req, res) => {
+    res.json({
+      success: true,
+      count: 2,
+      data: [
+        {
+          id: 'ssc-chsl-tier2-city',
+          title: 'SSC CHSL 10+2 Tier-II Exam City Slip 2026',
+          department: 'Staff Selection Commission',
+          releaseDate: 'Live Today',
+          directUrl: 'https://ssc.gov.in',
+        },
+        {
+          id: 'rrb-alp-cbt1-admit',
+          title: 'RRB Assistant Loco Pilot (ALP) CBT-1 Admit Card 2026',
+          department: 'Railway Recruitment Boards',
+          releaseDate: 'Active Now',
+          directUrl: 'https://www.rrbapply.gov.in',
+        },
+      ],
     });
   });
 

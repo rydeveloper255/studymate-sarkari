@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #00236f;
   --color-primary-container: #1e3a8a;
@@ -188,3 +190,172 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ==========================================================================
+   Comprehensive Dark Mode Palette & Structural Styling (Anti-Slop Standard)
+   ========================================================================== */
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html.dark {
+  color-scheme: dark;
+  background-color: #080e18;
+}
+
+html.dark body {
+  background-color: #080e18;
+  color: #f1f5f9;
+}
+
+/* Card & Surface Containers in Dark Mode */
+.dark .bg-white {
+  background-color: #101b2c !important;
+}
+
+.dark .bg-\[\#f7f9ff\],
+.dark .bg-\[\#f8f9ff\] {
+  background-color: #080e18 !important;
+}
+
+.dark .bg-\[\#eff4ff\] {
+  background-color: #142235 !important;
+}
+
+.dark .bg-\[\#e5eeff\] {
+  background-color: #192b42 !important;
+}
+
+.dark .bg-\[\#dce9ff\],
+.dark .bg-\[\#dce1ff\] {
+  background-color: #1e334e !important;
+}
+
+.dark .bg-\[\#d3e4fe\] {
+  background-color: #243c5b !important;
+}
+
+/* Interactive Hover States in Dark Mode */
+.dark .hover\:bg-\[\#eff4ff\]:hover {
+  background-color: #192b42 !important;
+}
+
+.dark .hover\:bg-\[\#e5eeff\]:hover {
+  background-color: #1f3552 !important;
+}
+
+.dark .hover\:bg-\[\#dce9ff\]:hover {
+  background-color: #243d5f !important;
+}
+
+.dark .hover\:bg-white\/80:hover {
+  background-color: #1e334e !important;
+}
+
+/* Structural Borders & Dividers */
+.dark .border-\[\#d3e4fe\],
+.dark .border-\[\#eff4ff\],
+.dark .border-\[\#c5c5d3\],
+.dark .border-\#eff4ff {
+  border-color: #1e324c !important;
+}
+
+.dark .border-\[\#d3e4fe\]\/50 {
+  border-color: #1e324c80 !important;
+}
+
+.dark .divide-\[\#eff4ff\] > :not([hidden]) ~ :not([hidden]),
+.dark .divide-\[\#d3e4fe\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e324c !important;
+}
+
+/* High-Legibility Text Color Mappings in Dark Mode */
+.dark .text-\[\#0b1c30\] {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-\[\#444651\] {
+  color: #94a3b8 !important;
+}
+
+.dark .text-\[\#757682\] {
+  color: #64748b !important;
+}
+
+/* Brand Accent Text Protection in Dark Mode */
+.dark .text-\[\#00236f\] {
+  color: #60a5fa !important;
+}
+
+.dark .group:hover .group-hover\:text-\[\#00236f\] {
+  color: #93c5fd !important;
+}
+
+.dark .group:hover .group-hover\:text-\[\#904d00\] {
+  color: #fbbf24 !important;
+}
+
+.dark .group:hover .group-hover\:text-\[\#004a32\] {
+  color: #34d399 !important;
+}
+
+/* Form Controls & Search Inputs in Dark Mode */
+.dark input[type="text"],
+.dark input[type="search"],
+.dark input[type="date"],
+.dark input[type="number"],
+.dark select,
+.dark textarea {
+  background-color: #121e30 !important;
+  color: #f8fafc !important;
+  border-color: #243852 !important;
+}
+
+.dark input::placeholder {
+  color: #64748b !important;
+}
+
+/* Flash Marquee & Top Bar in Dark Mode */
+.dark .bg-\[\#ffdcc3\] {
+  background-color: #24190e !important;
+  color: #fde68a !important;
+}
+
+.dark .text-\[\#2f1500\] {
+  color: #fde68a !important;
+}
+
+.dark .text-\[\#904d00\] {
+  color: #fbbf24 !important;
+}
+
+.dark .border-\[\#ffb77d\]\/30 {
+  border-color: #452a14 !important;
+}
+
+/* Status Badges in Dark Mode */
+.dark .bg-\[\#85f8c4\] {
+  background-color: #064e3b !important;
+  color: #6ee7b7 !important;
+}
+
+.dark .bg-\[\#ffdad6\] {
+  background-color: #450a0a !important;
+  color: #fca5a5 !important;
+}
+
+/* Tables & Data Grid in Dark Mode */
+.dark table thead th {
+  background-color: #142235 !important;
+  color: #cbd5e1 !important;
+  border-color: #1e324c !important;
+}
+
+.dark table tbody tr {
+  border-color: #17273d !important;
+}
+
+.dark table tbody tr:hover {
+  background-color: #192b42 !important;
+}
+

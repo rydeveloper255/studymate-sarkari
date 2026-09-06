@@ -1,25 +1,42 @@
 import React, { useState } from 'react';
+import { useTheme } from '../context/ThemeContext';
+import { PWAInstallButton } from './PWAInstallButton';
 
 export interface HeaderProps {
-  currentTab: string;
+  currentTab?: string;
+  activeTab?: string;
   onNavigate: (tab: string, jobId?: string) => void;
-  savedJobsCount: number;
+  savedJobsCount?: number;
+  savedCount?: number;
   onOpenSavedModal: () => void;
-  searchQuery: string;
-  onSearchChange: (q: string) => void;
+  searchQuery?: string;
+  onSearchChange?: (q: string) => void;
+  onSearchSubmit?: (q: string) => void;
   onOpenBotModal?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentTab,
+  activeTab,
   onNavigate,
   savedJobsCount,
+  savedCount,
   onOpenSavedModal,
-  searchQuery,
+  searchQuery = '',
   onSearchChange,
+  onSearchSubmit,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
+  const { isDarkMode, toggleDarkMode, theme, setTheme } = useTheme();
+
+  const selectedTab = activeTab || currentTab || 'home';
+  const bookmarksCount = savedCount !== undefined ? savedCount : (savedJobsCount || 0);
+
+  const handleQueryChange = (q: string) => {
+    if (onSearchChange) onSearchChange(q);
+    if (onSearchSubmit) onSearchSubmit(q);
+  };
 
   const navItems = [
     { id: 'home', label: 'Home' },
@@ -74,8 +91,12 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => handleNavClick('home')}
             className="flex items-center gap-3 flex-shrink-0 cursor-pointer select-none group"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#00236f] to-[#1e3a8a] flex items-center justify-center text-white shadow-md group-hover:scale-105 transition-transform">
-              <span className="material-symbols-outlined text-[24px]">school</span>
+            <div className="w-11 h-11 rounded-2xl overflow-hidden shadow-md group-hover:scale-105 transition-transform border border-[#38bdf8]/40 bg-[#070e1e] flex items-center justify-center p-0.5">
+              <img
+                src="/logo.png"
+                alt="StudyMate Sarkari Official Logo"
+                className="w-full h-full object-cover rounded-xl"
+              />
             </div>
             <div className="flex flex-col">
               <span className="font-display font-extrabold text-[22px] md:text-[24px] text-[#00236f] leading-tight tracking-tight">
@@ -97,15 +118,15 @@ export const Header: React.FC<HeaderProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => {
-                  onSearchChange(e.target.value);
-                  if (currentTab !== 'latest-jobs' && e.target.value.trim().length > 0) {
+                  handleQueryChange(e.target.value);
+                  if (selectedTab !== 'latest-jobs' && e.target.value.trim().length > 0) {
                     onNavigate('latest-jobs');
                   }
                 }}
               />
               {searchQuery && (
                 <button
-                  onClick={() => onSearchChange('')}
+                  onClick={() => handleQueryChange('')}
                   className="text-xs text-[#757682] hover:text-[#0b1c30] mr-1"
                 >
                   <span className="material-symbols-outlined text-[16px]">close</span>
@@ -119,6 +140,9 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Right Action Icons */}
           <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+            {/* PWA App Install Button */}
+            <PWAInstallButton variant="nav" />
+
             {/* Telegram Fast Badge Link */}
             <button
               onClick={() => handleNavClick('telegram-bot')}
@@ -127,6 +151,22 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <span className="material-symbols-outlined text-[16px]">send</span>
               <span>Telegram Bot</span>
+            </button>
+
+            {/* Dark Mode Toggle Switcher */}
+            <button
+              onClick={toggleDarkMode}
+              className="p-2 text-[#444651] hover:text-[#0b1c30] rounded-xl hover:bg-[#eff4ff] transition-all flex items-center gap-1.5 text-xs font-bold border border-transparent hover:border-[#d3e4fe]"
+              type="button"
+              aria-label="Toggle dark mode"
+              title={isDarkMode ? 'Switch to Light Mode (Din)' : 'Switch to Dark Mode (Raat)'}
+            >
+              <span className={`material-symbols-outlined text-[20px] transition-transform duration-300 ${isDarkMode ? 'text-[#fbbf24] rotate-90' : 'text-[#00236f]'}`}>
+                {isDarkMode ? 'light_mode' : 'dark_mode'}
+              </span>
+              <span className="hidden xl:inline text-[11px] font-bold">
+                {isDarkMode ? 'Dark' : 'Light'}
+              </span>
             </button>
 
             {/* Notifications Alert Dropdown Button */}
@@ -180,8 +220,8 @@ export const Header: React.FC<HeaderProps> = ({
               title="View Bookmarked & Saved Jobs"
             >
               <div className="w-8 h-8 rounded-full bg-[#dce1ff] text-[#00236f] flex items-center justify-center font-bold text-xs shadow-inner">
-                {savedJobsCount > 0 ? (
-                  <span className="text-[#00236f] font-black">{savedJobsCount}</span>
+                {bookmarksCount > 0 ? (
+                  <span className="text-[#00236f] font-black">{bookmarksCount}</span>
                 ) : (
                   <span className="material-symbols-outlined text-[18px]">bookmark</span>
                 )}
@@ -191,7 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
                   Aspirant Zone
                 </span>
                 <span className="text-[11px] text-[#444651] leading-tight flex items-center gap-0.5">
-                  Saved ({savedJobsCount}) <span className="material-symbols-outlined text-[13px]">expand_more</span>
+                  Saved ({bookmarksCount}) <span className="material-symbols-outlined text-[13px]">expand_more</span>
                 </span>
               </div>
             </div>
@@ -215,7 +255,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="max-w-[1280px] mx-auto px-4 md:px-6">
           <nav className="flex items-center gap-1 overflow-x-auto py-1.5 whitespace-nowrap scrollbar-none">
             {navItems.map((item) => {
-              const isActive = currentTab === item.id;
+              const isActive = selectedTab === item.id;
               return (
                 <button
                   key={item.id}
@@ -238,7 +278,48 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Menu Drawer */}
       {mobileMenuOpen && (
-        <div className="lg:hidden bg-white border-b border-[#eff4ff] shadow-lg px-4 py-3 max-h-[70vh] overflow-y-auto">
+        <div className="lg:hidden bg-white border-b border-[#eff4ff] shadow-lg px-4 py-3 max-h-[75vh] overflow-y-auto">
+          {/* Mobile PWA Install Row */}
+          <div className="mb-3">
+            <PWAInstallButton variant="mobile" />
+          </div>
+
+          {/* Mobile Dark Mode Switcher Row */}
+          <div className="mb-3 p-2.5 rounded-xl bg-[#eff4ff] flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs font-bold text-[#0b1c30]">
+              <span className="material-symbols-outlined text-[20px] text-[#00236f]">
+                {isDarkMode ? 'dark_mode' : 'light_mode'}
+              </span>
+              <span>Theme: {isDarkMode ? 'Dark Mode' : 'Light Mode'}</span>
+            </div>
+            <div className="flex items-center gap-1 bg-white p-1 rounded-lg shadow-xs">
+              <button
+                onClick={() => setTheme('light')}
+                className={`px-2 py-1 rounded text-[11px] font-bold flex items-center gap-1 ${
+                  theme === 'light' ? 'bg-[#00236f] text-white' : 'text-[#444651]'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[14px]">light_mode</span> Light
+              </button>
+              <button
+                onClick={() => setTheme('dark')}
+                className={`px-2 py-1 rounded text-[11px] font-bold flex items-center gap-1 ${
+                  theme === 'dark' ? 'bg-[#00236f] text-white' : 'text-[#444651]'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[14px]">dark_mode</span> Dark
+              </button>
+              <button
+                onClick={() => setTheme('system')}
+                className={`px-2 py-1 rounded text-[11px] font-bold flex items-center gap-1 ${
+                  theme === 'system' ? 'bg-[#00236f] text-white' : 'text-[#444651]'
+                }`}
+              >
+                Auto
+              </button>
+            </div>
+          </div>
+
           <div className="mb-3">
             <input
               className="w-full bg-[#eff4ff] text-sm text-[#0b1c30] placeholder:text-[#757682] px-3 py-2 rounded-lg"
@@ -246,8 +327,8 @@ export const Header: React.FC<HeaderProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => {
-                onSearchChange(e.target.value);
-                if (currentTab !== 'latest-jobs') {
+                handleQueryChange(e.target.value);
+                if (selectedTab !== 'latest-jobs') {
                   onNavigate('latest-jobs');
                 }
               }}
@@ -259,7 +340,7 @@ export const Header: React.FC<HeaderProps> = ({
                 key={item.id}
                 onClick={() => handleNavClick(item.id)}
                 className={`text-left px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
-                  currentTab === item.id
+                  selectedTab === item.id
                     ? 'bg-[#00236f] text-white'
                     : 'bg-[#eff4ff] text-[#0b1c30] hover:bg-[#dce9ff]'
                 }`}

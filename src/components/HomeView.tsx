@@ -1,6 +1,7 @@
 import React from 'react';
 import { JobItem, AdmitCardItem, ResultItem, AnswerKeyItem } from '../types';
 import { ALL_INDIAN_STATES } from '../data/mockData';
+import { HomeHeroBanner } from './HomeHeroBanner';
 
 export interface HomeViewProps {
   jobs: JobItem[];
@@ -8,7 +9,8 @@ export interface HomeViewProps {
   results: ResultItem[];
   answerKeys: AnswerKeyItem[];
   onNavigate: (tab: string, jobId?: string) => void;
-  onSearch: (q: string) => void;
+  onSearch?: (q: string) => void;
+  onSelectJob?: (job: JobItem) => void;
 }
 
 export const HomeView: React.FC<HomeViewProps> = ({
@@ -18,9 +20,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
   answerKeys,
   onNavigate,
   onSearch,
+  onSelectJob,
 }) => {
   return (
-    <div className="space-y-8 pb-12 font-sans">
+    <div className="space-y-6 pb-12 font-sans">
+      {/* 0. Official Top Heading Banner (StudyMate Sarkari All-in-One Gateway) */}
+      <HomeHeroBanner onNavigate={onNavigate} />
+
       {/* 1. Flash Gazette Bulletin Bar */}
       <div className="bg-[#ffdcc3] border-l-4 border-[#904d00] rounded-r-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
         <div className="flex items-center gap-2">

@@ -1,11 +1,21 @@
 import React from 'react';
+import { useTheme } from '../context/ThemeContext';
 
 export interface FooterProps {
   onNavigate: (tab: string, jobId?: string) => void;
-  onOpenTelegram: () => void;
+  onOpenTelegram?: () => void;
 }
 
 export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram }) => {
+  const { theme, setTheme } = useTheme();
+
+  const handleTelegramClick = () => {
+    if (onOpenTelegram) {
+      onOpenTelegram();
+    } else {
+      window.open('https://t.me/StudyMateSarkariLive', '_blank', 'noopener,noreferrer');
+    }
+  };
   return (
     <footer className="bg-[#eff4ff] border-t border-[#d3e4fe] pt-12 pb-8 mt-16 font-sans">
       <div className="max-w-[1280px] mx-auto px-4 md:px-6">
@@ -27,7 +37,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram }) =>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={onOpenTelegram}
+                onClick={handleTelegramClick}
                 className="bg-[#fe932c] hover:bg-[#fe932c]/90 text-[#2f1500] font-black text-sm px-6 py-3 rounded-xl shadow-md transition-all hover:scale-105 flex items-center gap-2"
               >
                 <span className="material-symbols-outlined text-[20px]">send</span>
@@ -188,10 +198,12 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram }) =>
 
           {/* Col 5: Institutional & Trust */}
           <div className="col-span-2 md:col-span-1">
-            <h4 className="font-display font-extrabold text-[#00236f] text-xs uppercase tracking-wider mb-4 flex items-center gap-1.5">
-              <span className="material-symbols-outlined text-[16px]">verified</span>
-              StudyMate Sarkari
-            </h4>
+            <div className="flex items-center gap-2.5 mb-3">
+              <img src="/logo.png" alt="StudyMate Sarkari Logo" className="w-8 h-8 rounded-lg shadow-xs border border-[#38bdf8]/40" />
+              <h4 className="font-display font-extrabold text-[#00236f] text-xs uppercase tracking-wider">
+                StudyMate Sarkari
+              </h4>
+            </div>
             <p className="text-xs text-[#444651] leading-relaxed mb-3">
               India's premier real-time Sarkari job intelligence network. All notices are verified against official Gazette notifications.
             </p>
@@ -204,11 +216,45 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram }) =>
 
         {/* Statutory Disclaimer & Copyright */}
         <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-[#757682]">
-          <div className="max-w-3xl text-center md:text-left text-[11px] leading-normal">
+          <div className="max-w-2xl text-center md:text-left text-[11px] leading-normal">
             <strong className="text-[#0b1c30]">Statutory Disclaimer:</strong> StudyMate Sarkari is an independent educational informational portal designed to aggregate public employment news and examination notices. We are not directly affiliated with any Central or State Government recruiting commission. All official applications must be submitted only on respective verified government portals.
           </div>
-          <div className="text-center md:text-right font-medium text-[11px] flex-shrink-0">
-            © 2025 StudyMate Sarkari. All rights reserved.
+          
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            {/* Theme switcher pill in footer */}
+            <div className="flex items-center gap-1 bg-white dark:bg-[#101b2c] p-1 rounded-lg border border-[#d3e4fe] dark:border-[#1e324c] shadow-xs">
+              <button
+                onClick={() => setTheme('light')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors ${
+                  theme === 'light' ? 'bg-[#00236f] text-white' : 'text-[#444651] dark:text-[#94a3b8]'
+                }`}
+                title="Light Mode (Din)"
+              >
+                <span className="material-symbols-outlined text-[13px]">light_mode</span> Light
+              </button>
+              <button
+                onClick={() => setTheme('dark')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors ${
+                  theme === 'dark' ? 'bg-[#00236f] text-white' : 'text-[#444651] dark:text-[#94a3b8]'
+                }`}
+                title="Dark Mode (Raat)"
+              >
+                <span className="material-symbols-outlined text-[13px]">dark_mode</span> Dark
+              </button>
+              <button
+                onClick={() => setTheme('system')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 transition-colors ${
+                  theme === 'system' ? 'bg-[#00236f] text-white' : 'text-[#444651] dark:text-[#94a3b8]'
+                }`}
+                title="System OS Theme"
+              >
+                Auto
+              </button>
+            </div>
+
+            <div className="text-center md:text-right font-medium text-[11px] flex-shrink-0">
+              © 2025 StudyMate Sarkari. All rights reserved.
+            </div>
           </div>
         </div>
       </div>

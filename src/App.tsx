@@ -13,6 +13,7 @@ import { ExamCalendarView } from './components/ExamCalendarView';
 import { CandidateToolsView } from './components/CandidateToolsView';
 import { TelegramBotDashboard } from './components/TelegramBotDashboard';
 import { SavedJobsModal } from './components/SavedJobsModal';
+import { OfflineIndicator } from './components/OfflineIndicator';
 
 import {
   MOCK_JOBS,
@@ -157,7 +158,7 @@ export function App() {
   const savedJobsList = jobs.filter((j) => bookmarkedJobIds.includes(j.id));
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#f7f9ff] text-[#0b1c30] antialiased selection:bg-[#00236f] selection:text-white">
+    <div className="min-h-screen flex flex-col bg-[#f7f9ff] dark:bg-[#080e18] text-[#0b1c30] dark:text-[#f1f5f9] antialiased selection:bg-[#00236f] selection:text-white transition-colors duration-200">
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#00236f] text-white text-xs font-bold px-4 py-3 rounded-2xl shadow-xl border border-white/20 flex items-center gap-2 animate-bounce">
@@ -165,6 +166,9 @@ export function App() {
           {toastMessage}
         </div>
       )}
+
+      {/* PWA Offline Network Indicator */}
+      <OfflineIndicator />
 
       {/* Global Header */}
       <Header
