@@ -13,7 +13,22 @@ Yeh comprehensive instruction manual explain karta hai ki **StudyMate Sarkari** 
 | **Telegram Chat ID** | `5165363865` | Broadcast channel / chat ID |
 | **Database Engine** | Supabase PostgreSQL | Table: `public.sarkari_notifications` |
 | **Deduplication Key** | `url` + `title` hash | Duplicate notifications ko filter karta hai |
+| **Mandatory Date Cutoff** | **1 August 2026 (`2026-08-01`)** | **STRICT RULE:** Only circulars/vacancies dated on or after 1 Aug 2026 are scraped |
+| **Auto-Expiry Purge** | **Live Forms Only** | Jaise hi application last date paar ho, vacancy website se automatic hat jayegi |
 | **Deployment Target** | Render.com Background Worker | Python 3.10+ with `asyncio` & `schedule` |
+
+---
+
+## ⚡ CORE SCRAPING DIRECTIVES & SYSTEM RULES
+
+1. **Strict 1 August 2026 Cutoff Date:**
+   - Bot ko strictly instruct kiya gaya hai ki **sirf 1 August 2026 ke baad** ki Vacancies, Results, Answer Keys aur Admit Cards hi scrape kare.
+   - 1 August 2026 se pehle ka koi bhi circular, notice ya past recruitment archive (2024, 2025, ya Jan-July 2026) automatically reject aur discard kar diya jayega.
+
+2. **Automatic Expired Vacancy Removal (Live Forms Only):**
+   - Website par **sirf wahi vacancies** display hongi jinka application form abhi live hai.
+   - Jaise hi kisi vacancy ki **Application Last Date** paar hoti hai (`application_last_date < today`), wo automatic website se hide/filter ho jayegi.
+   - Candidates ko kabhi bhi expired form nahi dikhega!
 
 ---
 

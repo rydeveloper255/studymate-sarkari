@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GovernmentSource, TelegramBotLog } from '../types';
 import { supabaseService, SupabaseConfig } from '../services/supabaseService';
+import { SmartBotFeaturesTab } from './SmartBotFeaturesTab';
 
 export interface TelegramBotDashboardProps {
   sources: GovernmentSource[];
@@ -19,7 +20,7 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
   onSimulateScrape,
   onNavigate,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'smart' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('overview');
   const [selectedCodeFile, setSelectedCodeFile] = useState<'bot.py' | 'config.py' | 'scrapers.py' | 'render.yaml' | 'sql'>('bot.py');
   const [copiedKey, setCopiedKey] = useState(false);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
@@ -173,6 +174,7 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
       <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-[#d3e4fe] shadow-xs overflow-x-auto scrollbar-none">
         {[
           { id: 'overview', label: 'Dashboard & Activity Logs', icon: 'dashboard' },
+          { id: 'smart', label: '10 Smart Bot Features 🧠', icon: 'psychology' },
           { id: 'render', label: 'Render.com Deployment 🚀', icon: 'cloud_upload' },
           { id: 'links', label: 'Government Links Directory', icon: 'link' },
           { id: 'supabase', label: 'Supabase Database Sync', icon: 'database' },
@@ -701,6 +703,9 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
           </div>
         </div>
       )}
+
+      {/* Tab: 10 Smart AI Features */}
+      {activeTab === 'smart' && <SmartBotFeaturesTab />}
 
       {/* 5. Tab 2: Government Links Directory */}
       {activeTab === 'links' && (

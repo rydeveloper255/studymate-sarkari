@@ -10,7 +10,13 @@ import aiohttp
 import asyncio
 import logging
 from bs4 import BeautifulSoup
-from config import KEYWORD_MAPPINGS
+from config import (
+    KEYWORD_MAPPINGS,
+    MIN_SCRAPE_DATE_STR,
+    MIN_SCRAPE_YEAR,
+    MIN_SCRAPE_MONTH,
+    MIN_SCRAPE_DAY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +26,48 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
 }
+
+
+def is_notice_after_cutoff(title: str, href: str = "") -> bool:
+    """
+    STRICT MANDATE: Must only scrape data dated on or after 1 August 2026.
+    Rejects older circulars (e.g. from 2021, 2022, 2023, 2024, 2025, or early 2026 prior to August).
+    """
+    combined = f"{title} {href}".lower()
+
+    # 1. Reject explicit past years if no 2026/2027 context is present
+    past_years = ["2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025"]
+    for yr in past_years:
+        if yr in combined and "2026" not in combined and "2027" not in combined:
+            return False
+
+    # 2. Check for early 2026 months prior to August (Jan-July 2026)
+    early_2026_patterns = [
+        "jan 2026", "january 2026", "feb 2026", "february 2026",
+        "mar 2026", "march 2026", "apr 2026", "april 2026",
+        "may 2026", "jun 2026", "june 2026", "jul 2026", "july 2026",
+        "-01-2026", "/01/2026", "-02-2026", "/02/2026",
+        "-03-2026", "/03/2026", "-04-2026", "/04/2026",
+        "-05-2026", "/05/2026", "-06-2026", "/06/2026",
+        "-07-2026", "/07/2026"
+    ]
+    for pattern in early_2026_patterns:
+        if pattern in combined:
+            return False
+
+    # 3. Parse explicit date patterns if present: DD-MM-YYYY or DD/MM/YYYY
+    date_match = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](20\d{2})', combined)
+    if date_match:
+        try:
+            d = int(date_match.group(1))
+            m = int(date_match.group(2))
+            y = int(date_match.group(3))
+            if y < 2026 or (y == 2026 and m < 8):
+                return False
+        except Exception:
+            pass
+
+    return True
 
 
 def categorize_title(title: str) -> str:
@@ -84,6 +132,11 @@ async def scrape_portal(session: aiohttp.ClientSession, source: dict) -> list:
                 # Filter out irrelevant header/footer text
                 irrelevant = ["contact us", "privacy policy", "terms", "sitemap", "home", "about us", "skip to content"]
                 if any(irr in clean_title.lower() for irr in irrelevant):
+                    continue
+
+                # STRICT MANDATE: Ignore data before 1 August 2026
+                if not is_notice_after_cutoff(clean_title, href):
+                    logger.debug(f"⏩ [CUTOFF FILTER] Skipped pre-August 2026 notice: {clean_title}")
                     continue
 
                 # Make absolute URL
