@@ -44,8 +44,14 @@ SUPABASE_KEY = (
     or os.getenv("VITE_SUPABASE_ANON_KEY", "")
 )
 
-# Scraping Frequency (in hours) - set to 1 hour as requested
-SCRAPING_INTERVAL_HOURS = int(os.getenv("SCRAPING_INTERVAL_HOURS", 1))
+# Scraping Frequency (in minutes) - set to 5 minutes as requested
+SCRAPING_INTERVAL_MINUTES = int(os.getenv("SCRAPING_INTERVAL_MINUTES", 5))
+SCRAPING_INTERVAL_HOURS = SCRAPING_INTERVAL_MINUTES / 60.0  # Backward compatibility
+
+# Human-like Batch Scraping Settings (Anti-Bot / IP Protection)
+# Scrapes in batches of 15 portals, pauses for 2 seconds between batches
+SCRAPING_BATCH_SIZE = int(os.getenv("SCRAPING_BATCH_SIZE", 15))
+SCRAPING_BATCH_DELAY_SECONDS = float(os.getenv("SCRAPING_BATCH_DELAY_SECONDS", 2.0))
 
 # =====================================================================
 # MANDATORY DATE CUTOFF: STRICTLY 1 AUGUST 2026 ONWARDS

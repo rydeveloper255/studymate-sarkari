@@ -9,6 +9,7 @@ import urllib.parse
 import aiohttp
 import asyncio
 import logging
+import random
 from bs4 import BeautifulSoup
 from config import (
     KEYWORD_MAPPINGS,
@@ -16,16 +17,37 @@ from config import (
     MIN_SCRAPE_YEAR,
     MIN_SCRAPE_MONTH,
     MIN_SCRAPE_DAY,
+    SCRAPING_BATCH_SIZE,
+    SCRAPING_BATCH_DELAY_SECONDS,
 )
 
 logger = logging.getLogger(__name__)
 
-# Standard browser user-agent to prevent blocking by government firewalls
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
-}
+# List of realistic modern browser user-agents to simulate natural human browsing
+ROTATING_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.2478.80",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+]
+
+def get_browser_headers() -> dict:
+    """Generates authentic browser headers to avoid anti-bot firewalls."""
+    ua = random.choice(ROTATING_USER_AGENTS)
+    return {
+        "User-Agent": ua,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9,hi;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+    }
 
 
 def is_notice_after_cutoff(title: str, href: str = "") -> bool:
@@ -94,7 +116,8 @@ async def scrape_portal(session: aiohttp.ClientSession, source: dict) -> list:
     items = []
 
     try:
-        async with session.get(target_url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=15)) as response:
+        headers = get_browser_headers()
+        async with session.get(target_url, headers=headers, timeout=aiohttp.ClientTimeout(total=18)) as response:
             if response.status != 200:
                 logger.warning(f"⚠️ [{source['name']}] HTTP status {response.status}")
                 return items
@@ -165,18 +188,46 @@ async def scrape_portal(session: aiohttp.ClientSession, source: dict) -> list:
 
 
 async def scrape_all_sources(central_links: list, state_links: list) -> list:
-    """Asynchronously scrapes all central and state portals concurrently."""
+    """
+    Intelligent Human-Simulated Batch Scraper:
+    1. Divides the 250+ portals into batches of 15 websites.
+    2. Scrapes each batch of 15 portals.
+    3. Pauses for 2 seconds between batches to mimic human browsing and prevent IP blocking.
+    """
     all_sources = central_links + state_links
     all_results = []
+    total_sources = len(all_sources)
+    batch_size = max(1, SCRAPING_BATCH_SIZE)
+    delay_sec = max(0.5, SCRAPING_BATCH_DELAY_SECONDS)
 
-    connector = aiohttp.TCPConnector(limit=10, ssl=False)
+    total_batches = (total_sources + batch_size - 1) // batch_size
+    logger.info(f"🌐 [BATCH SCRAPER] Commencing crawl of {total_sources} portals across {total_batches} batches (Batch Size: {batch_size}, Delay: {delay_sec}s)")
+
+    connector = aiohttp.TCPConnector(limit=15, ssl=False)
     async with aiohttp.ClientSession(connector=connector) as session:
-        tasks = [scrape_portal(session, src) for src in all_sources]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for batch_index in range(total_batches):
+            start_idx = batch_index * batch_size
+            end_idx = min(start_idx + batch_size, total_sources)
+            current_batch = all_sources[start_idx:end_idx]
 
-        for res in results:
-            if isinstance(res, list):
-                all_results.extend(res)
+            logger.info(f"🚀 [BATCH {batch_index + 1}/{total_batches}] Scraping websites {start_idx + 1} to {end_idx} ({len(current_batch)} portals)...")
+
+            # Scrape this batch of 15 websites
+            tasks = [scrape_portal(session, src) for src in current_batch]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            batch_found_count = 0
+            for res in results:
+                if isinstance(res, list):
+                    all_results.extend(res)
+                    batch_found_count += len(res)
+
+            logger.info(f"✅ [BATCH {batch_index + 1}/{total_batches} DONE] Discovered {batch_found_count} notices from {len(current_batch)} websites.")
+
+            # Human-like Anti-Bot Delay: 2 seconds pause before next batch
+            if batch_index < total_batches - 1:
+                logger.info(f"⏳ [ANTI-BOT HUMAN DELAY] Pausing {delay_sec}s before next batch of {batch_size} websites to avoid firewall blocks...")
+                await asyncio.sleep(delay_sec)
 
     # Deduplicate items by title
     seen_titles = set()
@@ -187,4 +238,5 @@ async def scrape_all_sources(central_links: list, state_links: list) -> list:
             seen_titles.add(title_key)
             unique_items.append(item)
 
+    logger.info(f"🎯 [ALL BATCHES COMPLETE] Scraped all {total_sources} portals. Total unique notices found: {len(unique_items)}")
     return unique_items

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { JobItem } from '../types';
+import { JobPdfSummaryModal } from './JobPdfSummaryModal';
+import { JobDiscussionForum } from './JobDiscussionForum';
+import { useLanguage } from '../context/LanguageContext';
 
 export interface JobDetailViewProps {
   job: JobItem;
@@ -16,9 +19,11 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
   onBack,
   onNavigate,
 }) => {
+  const { language } = useLanguage();
   const [activeSection, setActiveSection] = useState('dates');
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   // Interactive Countdown Timer
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({
@@ -200,6 +205,16 @@ ${getShareUrl()}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* 1-Page Official Short Notification PDF Button */}
+            <button
+              onClick={() => setIsPdfModalOpen(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-black bg-rose-600 hover:bg-rose-700 text-white transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+              title="Generate 1-Page Short Notification Summary PDF for Print"
+            >
+              <span className="material-symbols-outlined text-[17px]">picture_as_pdf</span>
+              <span>{language === 'hi' ? '1-पेज PDF विज्ञप्ति' : '1-Page Summary (PDF)'}</span>
+            </button>
+
             {/* Primary Native Share Button */}
             <button
               onClick={handleNativeShare}
@@ -845,6 +860,17 @@ ${getShareUrl()}
           </div>
         </div>
       )}
+      {/* 9. Candidate Discussion & Doubt Forum (Feature 6) */}
+      <div className="pt-4">
+        <JobDiscussionForum jobId={job.id} jobTitle={job.title} />
+      </div>
+
+      {/* 10. Printable 1-Page Summary PDF Modal (Feature 9) */}
+      <JobPdfSummaryModal
+        isOpen={isPdfModalOpen}
+        onClose={() => setIsPdfModalOpen(false)}
+        job={job}
+      />
     </div>
   );
 };

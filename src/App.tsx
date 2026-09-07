@@ -15,6 +15,9 @@ import { TelegramBotDashboard } from './components/TelegramBotDashboard';
 import { SavedJobsModal } from './components/SavedJobsModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PWAInstallPopup } from './components/PWAInstallPopup';
+import { QuickCategoryBar } from './components/QuickCategoryBar';
+import { PushNotificationModal } from './components/PushNotificationModal';
+import { EligibilityMatcher } from './components/EligibilityMatcher';
 
 import {
   MOCK_JOBS,
@@ -50,6 +53,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<string>(initialRoute.tab);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(initialRoute.jobId);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isPushModalOpen, setIsPushModalOpen] = useState(false);
 
   // Admin Mode State (Unlocked by secret code 'adminY n' or 'adminyn')
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
@@ -302,9 +306,17 @@ export function App() {
         onNavigate={handleNavigate}
         savedCount={bookmarkedJobIds.length}
         onOpenSavedModal={() => setIsSavedModalOpen(true)}
+        onOpenPushModal={() => setIsPushModalOpen(true)}
         onSearchSubmit={handleSearchSubmit}
         isAdmin={isAdmin}
         onUnlockAdmin={handleUnlockAdmin}
+      />
+
+      {/* Quick Category Bar (Feature 4 / Quick Access) */}
+      <QuickCategoryBar
+        activeTab={activeTab}
+        onNavigate={handleNavigate}
+        onOpenPushModal={() => setIsPushModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -318,6 +330,10 @@ export function App() {
             onSelectJob={handleSelectJob}
             onNavigate={handleNavigate}
             onSearch={handleSearchSubmit}
+            onSelectState={(st) => {
+              setSearchQuery(st);
+              setActiveTab('state-wise');
+            }}
             onUnlockAdmin={handleUnlockAdmin}
           />
         )}
@@ -368,7 +384,23 @@ export function App() {
         )}
 
         {activeTab === 'candidate-tools' && (
-          <CandidateToolsView onNavigate={handleNavigate} />
+          <CandidateToolsView jobs={jobs} onNavigate={handleNavigate} />
+        )}
+
+        {activeTab === 'eligibility-matcher' && (
+          <div className="space-y-4">
+            <nav className="flex items-center gap-2 text-xs text-[#757682] dark:text-[#94a3b8]">
+              <button
+                onClick={() => handleNavigate('home')}
+                className="hover:text-[#00236f] dark:hover:text-white flex items-center gap-1 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[14px]">home</span> Home
+              </button>
+              <span>/</span>
+              <span className="text-[#0b1c30] dark:text-white font-bold">AI Eligibility Matcher</span>
+            </nav>
+            <EligibilityMatcher jobs={jobs} onSelectJob={handleSelectJob} />
+          </div>
         )}
 
         {activeTab === 'telegram-bot' && (
@@ -395,6 +427,12 @@ export function App() {
         savedJobs={savedJobsList}
         onRemoveBookmark={handleToggleBookmark}
         onSelectJob={handleSelectJob}
+      />
+
+      {/* Push Notification & Telegram Alert Modal (Feature 1 / Header Bell) */}
+      <PushNotificationModal
+        isOpen={isPushModalOpen}
+        onClose={() => setIsPushModalOpen(false)}
       />
 
       {/* Global Footer */}

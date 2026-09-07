@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 export interface HeaderProps {
   currentTab?: string;
@@ -8,6 +9,7 @@ export interface HeaderProps {
   savedJobsCount?: number;
   savedCount?: number;
   onOpenSavedModal: () => void;
+  onOpenPushModal?: () => void;
   searchQuery?: string;
   onSearchChange?: (q: string) => void;
   onSearchSubmit?: (q: string) => void;
@@ -24,6 +26,7 @@ export const Header: React.FC<HeaderProps> = ({
   savedJobsCount,
   savedCount,
   onOpenSavedModal,
+  onOpenPushModal,
   searchQuery = '',
   onSearchChange,
   onSearchSubmit,
@@ -33,7 +36,25 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationOpen, setNotificationOpen] = useState(false);
-  const { isDarkMode, toggleDarkMode, theme, setTheme } = useTheme();
+  const [tickerText, setTickerText] = useState(
+    'UPSC Civil Services 2025 Prelims Admit Card Released • SSC CGL 2025 (17,727 Posts) Apply Online Closes 24 July • Railway RRB NTPC (11,558 Posts) Notification Out • IBPS PO XV Online Form Active'
+  );
+  const [tickerActive, setTickerActive] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/ticker')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.success) {
+          if (data.text) setTickerText(data.text);
+          if (typeof data.active === 'boolean') setTickerActive(data.active);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const { isDarkMode, toggleDarkMode, theme, setTheme, eyeCareMode, toggleEyeCareMode } = useTheme();
+  const { language, toggleLanguage, t } = useLanguage();
 
   const selectedTab = activeTab || currentTab || 'home';
   const bookmarksCount = savedCount !== undefined ? savedCount : (savedJobsCount || 0);
@@ -59,16 +80,16 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const navItems = [
-    { id: 'home', label: 'Home' },
-    { id: 'latest-jobs', label: 'Latest Jobs' },
-    { id: 'admit-card', label: 'Admit Card' },
-    { id: 'results', label: 'Results' },
-    { id: 'answer-key', label: 'Answer Key' },
-    { id: 'notifications', label: 'Notifications' },
-    { id: 'state-wise', label: 'State Wise' },
-    { id: 'all-india', label: 'All India' },
-    { id: 'exam-calendar', label: 'Exam Calendar' },
-    { id: 'candidate-tools', label: 'Candidate Tools' },
+    { id: 'home', label: t('nav_home', 'Home') },
+    { id: 'latest-jobs', label: t('nav_latest_jobs', 'Latest Jobs') },
+    { id: 'admit-card', label: t('nav_admit_card', 'Admit Card') },
+    { id: 'results', label: t('nav_results', 'Results') },
+    { id: 'answer-key', label: t('nav_answer_key', 'Answer Key') },
+    { id: 'eligibility-matcher', label: t('nav_eligibility_matcher', 'AI Matcher'), highlight: true },
+    { id: 'state-wise', label: t('nav_state_wise', 'State Wise') },
+    { id: 'all-india', label: t('nav_all_india', 'All India') },
+    { id: 'exam-calendar', label: t('nav_exam_calendar', 'Exam Calendar') },
+    { id: 'candidate-tools', label: t('nav_candidate_tools', 'Candidate Tools') },
     ...(isAdmin ? [{ id: 'telegram-bot', label: '👑 Admin: Telegram Bot & Scraper', highlight: true }] : []),
   ];
 
@@ -80,45 +101,47 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="sticky top-0 left-0 w-full z-40 bg-[#ffffff] dark:bg-[#070e1e] shadow-[0_1px_8px_rgba(0,0,0,0.04)] font-sans border-b border-[#eff4ff] dark:border-[#1e324c]">
       {/* 1. Topmost Live Marquee Ticker Bar */}
-      <div className="bg-[#ffdcc3] dark:bg-[#2d1a04] text-[#2f1500] dark:text-[#fed7aa] text-[11px] font-bold px-3 sm:px-4 md:px-6 py-1.5 flex items-center justify-between border-b border-[#ffb77d]/30 dark:border-[#7c2d12]/40 w-full">
-        <div className="max-w-7xl mx-auto w-full flex items-center justify-between overflow-hidden">
-          <div className="flex items-center gap-2 w-full min-w-0">
-            <span className="bg-[#904d00] text-white px-2 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider flex-shrink-0 flex items-center gap-1 shadow-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-              Live Updates
-            </span>
-            <div className="overflow-hidden whitespace-nowrap text-[#2f1500] dark:text-[#fed7aa] flex-1 min-w-0">
-              <p className="inline-block animate-marquee pl-4 text-xs font-semibold">
-                UPSC Civil Services 2025 Prelims Admit Card Released • SSC CGL 2025 (17,727 Posts) Apply Online Closes 24 July • Railway RRB NTPC (11,558 Posts) Notification Out • IBPS PO XV Online Form Active
-              </p>
+      {tickerActive && (
+        <div className="bg-[#ffdcc3] dark:bg-[#2d1a04] text-[#2f1500] dark:text-[#fed7aa] text-[11px] font-bold px-3 sm:px-4 md:px-6 py-1.5 flex items-center justify-between border-b border-[#ffb77d]/30 dark:border-[#7c2d12]/40 w-full">
+          <div className="max-w-7xl mx-auto w-full flex items-center justify-between overflow-hidden">
+            <div className="flex items-center gap-2 w-full min-w-0">
+              <span className="bg-[#904d00] text-white px-2 py-0.5 rounded text-[10px] uppercase font-extrabold tracking-wider flex-shrink-0 flex items-center gap-1 shadow-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
+                Live Updates
+              </span>
+              <div className="overflow-hidden whitespace-nowrap text-[#2f1500] dark:text-[#fed7aa] flex-1 min-w-0">
+                <p className="inline-block animate-marquee pl-4 text-xs font-semibold">
+                  {tickerText}
+                </p>
+              </div>
+            </div>
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0 pl-4 text-[11px]">
+              <a
+                href="https://t.me/Sarkariupdatealerts"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-[#0284c7] hover:bg-[#0369a1] text-white font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition-all hover:scale-105 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[13px]">send</span>
+                <span>Join Telegram</span>
+              </a>
+              <a
+                href="https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z"
+                target="_blank"
+                rel="noreferrer"
+                className="bg-[#25D366] hover:bg-[#20bd5a] text-[#002114] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition-all hover:scale-105 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[13px]">chat</span>
+                <span>WhatsApp Channel</span>
+              </a>
+              <span className="text-[#c5c5d3] dark:text-[#475569]">|</span>
+              <span className="font-bold flex items-center gap-1">
+                <span className="material-symbols-outlined text-[13px]">support_agent</span> 1800-SM-SARKARI
+              </span>
             </div>
           </div>
-          <div className="hidden md:flex items-center gap-2 flex-shrink-0 pl-4 text-[11px]">
-            <a
-              href="https://t.me/Sarkariupdatealerts"
-              target="_blank"
-              rel="noreferrer"
-              className="bg-[#0284c7] hover:bg-[#0369a1] text-white font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition-all hover:scale-105 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[13px]">send</span>
-              <span>Join Telegram</span>
-            </a>
-            <a
-              href="https://whatsapp.com/channel/0029Vb8ycrRKbYMIlkbOGy1z"
-              target="_blank"
-              rel="noreferrer"
-              className="bg-[#25D366] hover:bg-[#20bd5a] text-[#002114] font-black px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-xs transition-all hover:scale-105 cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[13px]">chat</span>
-              <span>WhatsApp Channel</span>
-            </a>
-            <span className="text-[#c5c5d3] dark:text-[#475569]">|</span>
-            <span className="font-bold flex items-center gap-1">
-              <span className="material-symbols-outlined text-[13px]">support_agent</span> 1800-SM-SARKARI
-            </span>
-          </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Main Brand & Search Bar Header */}
       <div className="h-16 sm:h-20 bg-[#ffffff] dark:bg-[#070e1e] border-b border-[#eff4ff] dark:border-[#1e324c] w-full">
@@ -204,6 +227,36 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
 
+            {/* Language Switcher Button */}
+            <button
+              onClick={toggleLanguage}
+              className="px-2.5 py-1.5 rounded-xl bg-[#eff4ff] dark:bg-[#101b2c] hover:bg-[#dce9ff] dark:hover:bg-[#1e293b] text-[#00236f] dark:text-[#93c5fd] font-extrabold text-xs transition-all flex items-center gap-1 border border-[#d3e4fe] dark:border-[#1e324c] cursor-pointer shadow-xs"
+              type="button"
+              title="Switch Language / भाषा बदलें"
+            >
+              <span className="material-symbols-outlined text-[16px]">translate</span>
+              <span>{language === 'hi' ? '🇮🇳 हिन्दी' : 'English'}</span>
+            </button>
+
+            {/* Eye-Care Study Mode Button */}
+            <button
+              onClick={toggleEyeCareMode}
+              className={`p-1.5 sm:p-2 rounded-xl transition-all flex items-center gap-1 text-xs font-bold border cursor-pointer ${
+                eyeCareMode
+                  ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/70 dark:text-amber-300 dark:border-amber-800'
+                  : 'text-[#444651] dark:text-[#94a3b8] hover:text-[#0b1c30] dark:hover:text-white hover:bg-[#eff4ff] dark:hover:bg-[#101b2c] border-transparent'
+              }`}
+              type="button"
+              title="Eye-Care Study Mode (Warm sepia for long study sessions)"
+            >
+              <span className="material-symbols-outlined text-[20px] text-amber-600 dark:text-amber-400">
+                visibility
+              </span>
+              <span className="hidden xl:inline text-[11px] font-bold">
+                {eyeCareMode ? 'Warm Tone' : 'Eye Care'}
+              </span>
+            </button>
+
             {/* Dark Mode Toggle Switcher */}
             <button
               onClick={toggleDarkMode}
@@ -259,6 +312,19 @@ export const Header: React.FC<HeaderProps> = ({
                       <p className="font-bold text-[#904d00] dark:text-[#fb923c]">SSC CGL 2025 Registration Ending</p>
                       <p className="text-[11px] text-[#444651] dark:text-[#94a3b8]">Only 3 days left for 17,727 posts.</p>
                     </div>
+
+                    {onOpenPushModal && (
+                      <button
+                        onClick={() => {
+                          setNotificationOpen(false);
+                          onOpenPushModal();
+                        }}
+                        className="w-full mt-1 p-2 rounded-xl bg-[#00236f] text-white font-bold text-xs flex items-center justify-center gap-1.5 hover:bg-[#00174c] transition-colors cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">notifications_active</span>
+                        <span>Manage Push Notifications</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

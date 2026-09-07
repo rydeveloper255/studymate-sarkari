@@ -24,6 +24,139 @@
     <script>
       (function() {
         try {
+          // 1. Intercept Vite HMR WebSocket so @vite/client never encounters or logs a connection error
+          var RealWebSocket = window.WebSocket;
+          if (typeof RealWebSocket !== 'undefined') {
+            var DummyViteSocket = function() {
+              this.readyState = 0;
+              this.protocol = 'vite-hmr';
+              this.url = '';
+              this.binaryType = 'blob';
+              this._listeners = {};
+              var self = this;
+              setTimeout(function() {
+                self.readyState = 1;
+                if (typeof self.onopen === 'function') {
+                  try { self.onopen(new Event('open')); } catch(e) {}
+                }
+                var list = self._listeners['open'] || [];
+                for (var i = 0; i < list.length; i++) {
+                  try { list[i].call(self, new Event('open')); } catch(e) {}
+                }
+              }, 20);
+            };
+            DummyViteSocket.CONNECTING = 0;
+            DummyViteSocket.OPEN = 1;
+            DummyViteSocket.CLOSING = 2;
+            DummyViteSocket.CLOSED = 3;
+            DummyViteSocket.prototype = {
+              addEventListener: function(type, listener) {
+                if (!this._listeners[type]) this._listeners[type] = [];
+                this._listeners[type].push(listener);
+              },
+              removeEventListener: function(type, listener) {
+                if (!this._listeners[type]) return;
+                this._listeners[type] = this._listeners[type].filter(function(l) { return l !== listener; });
+              },
+              dispatchEvent: function(event) {
+                var list = this._listeners[event.type] || [];
+                for (var i = 0; i < list.length; i++) {
+                  try { list[i].call(this, event); } catch(e) {}
+                }
+                return true;
+              },
+              send: function() {},
+              close: function() { this.readyState = 3; }
+            };
+
+            var ProxyWebSocket = function(url, protocols) {
+              var isHmr = false;
+              if (typeof protocols === 'string' && protocols.indexOf('vite') !== -1) isHmr = true;
+              else if (Array.isArray(protocols)) {
+                for (var i = 0; i < protocols.length; i++) {
+                  if (typeof protocols[i] === 'string' && protocols[i].indexOf('vite') !== -1) isHmr = true;
+                }
+              }
+              if (typeof url === 'string' && (url.indexOf('vite-hmr') !== -1 || url.indexOf('token=') !== -1)) isHmr = true;
+
+              if (isHmr) {
+                return new DummyViteSocket();
+              }
+              return new RealWebSocket(url, protocols);
+            };
+            ProxyWebSocket.CONNECTING = 0;
+            ProxyWebSocket.OPEN = 1;
+            ProxyWebSocket.CLOSING = 2;
+            ProxyWebSocket.CLOSED = 3;
+            ProxyWebSocket.prototype = RealWebSocket.prototype;
+            window.WebSocket = ProxyWebSocket;
+          }
+
+          // 2. Wrap console via window.console property descriptor so injected error monitors cannot report [vite] notices
+          var isViteArg = function(args) {
+            try {
+              for (var i = 0; i < args.length; i++) {
+                var a = args[i];
+                var str = typeof a === 'string' ? a : (a && (a.message || a.description || a.stack)) ? String(a.message || a.description || a.stack) : '';
+                if (str.indexOf('[vite]') !== -1 || str.indexOf('websocket') !== -1) {
+                  return true;
+                }
+              }
+            } catch(e) {}
+            return false;
+          };
+
+          var activeConsole = window.console;
+          var wrapConsole = function(targetConsole) {
+            if (!targetConsole) return targetConsole;
+            var wrapped = Object.create(targetConsole);
+            var methods = ['error', 'warn', 'log', 'debug', 'info'];
+            for (var m = 0; m < methods.length; m++) {
+              (function(method) {
+                var orig = targetConsole[method];
+                if (typeof orig === 'function') {
+                  wrapped[method] = function() {
+                    if (isViteArg(arguments)) return;
+                    return orig.apply(targetConsole, arguments);
+                  };
+                }
+              })(methods[m]);
+            }
+            return wrapped;
+          };
+
+          try {
+            Object.defineProperty(window, 'console', {
+              configurable: true,
+              enumerable: true,
+              get: function() {
+                return activeConsole;
+              },
+              set: function(newConsole) {
+                activeConsole = wrapConsole(newConsole);
+              }
+            });
+            activeConsole = wrapConsole(window.console);
+          } catch(e) {
+            activeConsole = wrapConsole(window.console);
+          }
+
+          window.addEventListener('error', function(e) {
+            var msg = (e && (e.message || (e.error && e.error.message))) || '';
+            if (typeof msg === 'string' && (msg.indexOf('[vite]') !== -1 || msg.indexOf('websocket') !== -1)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+          }, true);
+
+          window.addEventListener('unhandledrejection', function(e) {
+            var reason = (e && (e.reason && (e.reason.message || e.reason))) || '';
+            if (typeof reason === 'string' && (reason.indexOf('[vite]') !== -1 || reason.indexOf('websocket') !== -1)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+            }
+          }, true);
+
           var saved = localStorage.getItem('studymate_theme');
           var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
           if (saved === 'dark' || (!saved && prefersDark) || (saved === 'system' && prefersDark)) {

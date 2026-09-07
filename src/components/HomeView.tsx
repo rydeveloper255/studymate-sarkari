@@ -2,6 +2,9 @@ import React from 'react';
 import { JobItem, AdmitCardItem, ResultItem, AnswerKeyItem } from '../types';
 import { ALL_INDIAN_STATES } from '../data/mockData';
 import { HomeHeroBanner } from './HomeHeroBanner';
+import { BentoHomeGrid } from './BentoHomeGrid';
+import { InteractiveIndiaMap } from './InteractiveIndiaMap';
+import { useLanguage } from '../context/LanguageContext';
 
 export interface HomeViewProps {
   jobs: JobItem[];
@@ -11,6 +14,7 @@ export interface HomeViewProps {
   onNavigate: (tab: string, jobId?: string) => void;
   onSearch?: (q: string) => void;
   onSelectJob?: (job: JobItem) => void;
+  onSelectState?: (st: string) => void;
   onUnlockAdmin?: () => void;
 }
 
@@ -22,9 +26,11 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onNavigate,
   onSearch,
   onSelectJob,
+  onSelectState,
   onUnlockAdmin,
 }) => {
   const [localSearch, setLocalSearch] = React.useState('');
+  const { language, t } = useLanguage();
 
   const handleHeroSearch = (query: string) => {
     const trimmed = query.trim();
@@ -253,6 +259,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </a>
       </div>
 
+      {/* Official Bento-Grid Spotlight (Feature 5 UI without Quiz Tile 3) */}
+      <BentoHomeGrid
+        jobs={jobs}
+        admitCards={admitCards}
+        results={results}
+        onNavigate={onNavigate}
+        onSelectJob={onSelectJob || (() => {})}
+      />
+
       {/* 4. 3-Column Direct Recruitment Noticeboard */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Column 1: Sarkari Results */}
@@ -364,10 +379,15 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 onClick={() => onNavigate('job-detail', job.id)}
                 className="p-3.5 hover:bg-[#eff4ff] transition-colors cursor-pointer group"
               >
-                <div className="flex items-center gap-1.5 mb-1">
-                  {job.isClosingSoon && (
-                    <span className="bg-[#ffdad6] text-[#93000a] text-[9px] font-black px-1.5 py-0.2 rounded uppercase">
+                <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                  {job.isClosingSoon ? (
+                    <span className="bg-[#ba1a1a] text-white text-[9px] font-black px-1.5 py-0.2 rounded uppercase flex items-center gap-1 animate-pulse">
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
                       Ending Soon
+                    </span>
+                  ) : (
+                    <span className="bg-[#85f8c4] text-[#002114] text-[9px] font-black px-1.5 py-0.2 rounded uppercase">
+                      New Today
                     </span>
                   )}
                   <span className="text-[10px] font-extrabold text-[#00236f] bg-[#dce1ff] px-1.5 py-0.5 rounded">
@@ -448,47 +468,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </div>
       </div>
 
-      {/* 5. Explore Jobs By State Directory */}
-      <div className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
-          <div>
-            <h2 className="font-display font-extrabold text-lg text-[#00236f] flex items-center gap-2">
-              <span className="material-symbols-outlined text-[22px]">map</span>
-              Explore State-Wise Sarkari Jobs
-            </h2>
-            <p className="text-xs text-[#444651]">Direct portal access for State Public Service Commissions & Boards</p>
-          </div>
-          <button
-            onClick={() => onNavigate('state-wise')}
-            className="text-xs font-bold text-[#00236f] hover:text-[#1e3a8a] flex items-center gap-1"
-          >
-            All 28 States & 8 UTs <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {ALL_INDIAN_STATES.slice(0, 12).map((st) => (
-            <button
-              key={st.code}
-              onClick={() => onNavigate('state-wise')}
-              className="p-3 rounded-xl bg-[#eff4ff] hover:bg-[#dce9ff] border border-[#d3e4fe]/60 text-left transition-all group flex flex-col justify-between"
-            >
-              <div>
-                <span className="text-xs font-bold text-[#00236f] group-hover:text-[#00164e] block">
-                  {st.name}
-                </span>
-                <span className="text-[10px] text-[#444651] block">{st.hindiName}</span>
-              </div>
-              <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-[#904d00]">
-                <span>{st.activeJobsCount} Jobs</span>
-                <span className="material-symbols-outlined text-[14px] group-hover:translate-x-1 transition-transform">
-                  chevron_right
-                </span>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* 5. Interactive India Map & State Explorer (UI Suggestion 2) */}
+      <InteractiveIndiaMap
+        onSelectState={(st) => {
+          if (onSelectState) onSelectState(st);
+          onNavigate('state-wise');
+        }}
+        onNavigate={onNavigate}
+      />
 
       {/* 6. Popular Exam Categories Bar */}
       <div className="bg-[#eff4ff] rounded-2xl p-6 border border-[#d3e4fe]">

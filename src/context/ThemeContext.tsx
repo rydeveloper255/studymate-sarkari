@@ -5,13 +5,16 @@ export type ThemeMode = 'light' | 'dark' | 'system';
 interface ThemeContextType {
   theme: ThemeMode;
   isDarkMode: boolean;
+  eyeCareMode: boolean;
   toggleDarkMode: () => void;
+  toggleEyeCareMode: () => void;
   setTheme: (theme: ThemeMode) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'studymate_theme';
+const EYE_CARE_STORAGE_KEY = 'studymate_eye_care';
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -24,6 +27,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // ignore
     }
     return 'system';
+  });
+
+  const [eyeCareMode, setEyeCareMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(EYE_CARE_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
   });
 
   const [systemIsDark, setSystemIsDark] = useState<boolean>(() => {
@@ -48,7 +59,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const isDarkMode = theme === 'dark' || (theme === 'system' && systemIsDark);
 
-  // Apply dark class to document.documentElement
+  // Apply dark and eye-care classes to document.documentElement
   useEffect(() => {
     const root = document.documentElement;
     if (isDarkMode) {
@@ -58,7 +69,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       root.classList.remove('dark');
       root.style.colorScheme = 'light';
     }
-  }, [isDarkMode]);
+
+    if (eyeCareMode) {
+      root.classList.add('eye-care-study');
+    } else {
+      root.classList.remove('eye-care-study');
+    }
+  }, [isDarkMode, eyeCareMode]);
 
   const setTheme = (newTheme: ThemeMode) => {
     setThemeState(newTheme);
@@ -77,8 +94,29 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const toggleEyeCareMode = () => {
+    setEyeCareMode((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(EYE_CARE_STORAGE_KEY, String(next));
+      } catch (e) {
+        console.error(e);
+      }
+      return next;
+    });
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, isDarkMode, toggleDarkMode, setTheme }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        isDarkMode,
+        eyeCareMode,
+        toggleDarkMode,
+        toggleEyeCareMode,
+        setTheme,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

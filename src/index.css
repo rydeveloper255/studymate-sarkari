@@ -198,6 +198,24 @@ html {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+html.eye-care-study {
+  filter: sepia(0.20) saturate(0.95);
+}
+
+html.eye-care-study.dark {
+  background-color: #0b111e !important;
+  color: #faebd7 !important;
+}
+
+html.eye-care-study.dark body {
+  background-color: #0b111e !important;
+  color: #faebd7 !important;
+}
+
+html.eye-care-study:not(.dark) {
+  background-color: #fbf7ee !important;
+}
+
 html.dark {
   color-scheme: dark;
   background-color: #080e18;

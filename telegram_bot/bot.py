@@ -64,7 +64,10 @@ from config import (
     WEBSITE_DOMAIN,
     SUPABASE_URL,
     SUPABASE_KEY,
+    SCRAPING_INTERVAL_MINUTES,
     SCRAPING_INTERVAL_HOURS,
+    SCRAPING_BATCH_SIZE,
+    SCRAPING_BATCH_DELAY_SECONDS,
     CENTRAL_GOVT_LINKS,
     STATE_WISE_GOVT_LINKS,
     KEYWORD_MAPPINGS,
@@ -790,14 +793,14 @@ def save_to_supabase(item: dict) -> bool:
 
 
 async def run_hourly_scrape_cycle():
-    """Main job executed every hour."""
+    """Main autonomous scraping job executed every 5 minutes in human-simulated batches."""
     cycle_start = datetime.utcnow()
     logger.info("=" * 60)
-    logger.info(f"🚀 STARTING HOURLY CRAWL CYCLE AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    logger.info(f"Checking {len(CENTRAL_GOVT_LINKS)} Central + {len(STATE_WISE_GOVT_LINKS)} State Portals...")
+    logger.info(f"🚀 STARTING 5-MINUTE BATCHED CRAWL CYCLE AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Scanning {len(CENTRAL_GOVT_LINKS)} Central + {len(STATE_WISE_GOVT_LINKS)} State Portals (Batches of {SCRAPING_BATCH_SIZE}, {SCRAPING_BATCH_DELAY_SECONDS}s delay)...")
     logger.info("=" * 60)
 
-    # Scrape all configured portals
+    # Scrape all configured portals with 15-site batches and 2s human pacing
     discovered_items = await scrape_all_sources(CENTRAL_GOVT_LINKS, STATE_WISE_GOVT_LINKS)
     new_count = 0
 
@@ -1225,13 +1228,15 @@ async def run_crawler_and_polling():
 
         logger.info("🤖 Interactive Telegram Application initialized with all 10 smart features.")
 
-        # Setup recurring scraper job inside application
+        # Setup recurring scraper job inside application (every 5 minutes in 15-site batches)
+        interval_seconds = SCRAPING_INTERVAL_MINUTES * 60
+
         async def scheduled_crawler_job(ctx: ContextTypes.DEFAULT_TYPE):
             await run_hourly_scrape_cycle()
 
         if app.job_queue:
-            app.job_queue.run_repeating(scheduled_crawler_job, interval=SCRAPING_INTERVAL_HOURS * 3600, first=3600)
-            logger.info(f"⏰ Scraper job registered in JobQueue (every {SCRAPING_INTERVAL_HOURS} hour(s)).")
+            app.job_queue.run_repeating(scheduled_crawler_job, interval=interval_seconds, first=10)
+            logger.info(f"⏰ Autonomous Scraper registered in JobQueue (runs every {SCRAPING_INTERVAL_MINUTES} min in batches of {SCRAPING_BATCH_SIZE} sites with {SCRAPING_BATCH_DELAY_SECONDS}s anti-bot delay).")
 
         await app.initialize()
         await app.start()
@@ -1243,13 +1248,14 @@ async def run_crawler_and_polling():
             await asyncio.sleep(60)
     else:
         logger.warning("TELEGRAM_BOT_TOKEN missing. Running scheduler fallback.")
+        interval_seconds = SCRAPING_INTERVAL_MINUTES * 60
         while True:
             await run_hourly_scrape_cycle()
-            await asyncio.sleep(SCRAPING_INTERVAL_HOURS * 3600)
+            await asyncio.sleep(interval_seconds)
 
 
 def schedule_runner():
-    """Configures scheduler to run every 1 hour continuously."""
+    """Configures scheduler to run every 5 minutes in human-simulated batches."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:

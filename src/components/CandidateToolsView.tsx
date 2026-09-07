@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { JobItem } from '../types';
 import { PhotoDateAdder } from './candidate-tools/PhotoDateAdder';
 import { AgeRelaxationCalculator } from './candidate-tools/AgeRelaxationCalculator';
 import { NegativeMarkingCalculator } from './candidate-tools/NegativeMarkingCalculator';
@@ -11,9 +12,12 @@ import { ExamTravelPlanner } from './candidate-tools/ExamTravelPlanner';
 import { ZonePreferenceComparator } from './candidate-tools/ZonePreferenceComparator';
 import { PhotoResizer } from './candidate-tools/PhotoResizer';
 import { CbtMarksNormalizer } from './candidate-tools/CbtMarksNormalizer';
+import { EligibilityMatcher } from './EligibilityMatcher';
+import { useLanguage } from '../context/LanguageContext';
 
 export interface CandidateToolsViewProps {
-  onNavigate: (tab: string) => void;
+  jobs?: JobItem[];
+  onNavigate: (tab: string, jobId?: string) => void;
 }
 
 interface ToolDefinition {
@@ -25,6 +29,7 @@ interface ToolDefinition {
 }
 
 const TOOLS: ToolDefinition[] = [
+  { id: 'eligibility-matcher', name: 'AI Eligibility & Criteria Matcher', category: 'prep', icon: 'psychology', tagline: '1-Click calculate exact % eligibility for 100+ vacancies' },
   { id: 'photo-date', name: 'Photo Name & Date Adder', category: 'form', icon: 'badge', tagline: 'Add DOP and Candidate name on photo strip' },
   { id: 'age-eligibility', name: 'Age Relaxation & Eligibility', category: 'prep', icon: 'cake', tagline: 'OBC/SC/ST/PwD cutoff age calculator' },
   { id: 'negative-marking', name: 'Negative Marking & Raw Score', category: 'exam', icon: 'calculate', tagline: '1/3rd, 1/4th penalty & accuracy score' },
@@ -39,8 +44,9 @@ const TOOLS: ToolDefinition[] = [
   { id: 'normalization', name: 'CBT Marks Normalizer', category: 'exam', icon: 'functions', tagline: 'Multi-shift percentile standard normalizer' },
 ];
 
-export const CandidateToolsView: React.FC<CandidateToolsViewProps> = ({ onNavigate }) => {
-  const [activeToolId, setActiveToolId] = useState<string>('photo-date');
+export const CandidateToolsView: React.FC<CandidateToolsViewProps> = ({ jobs = [], onNavigate }) => {
+  const { language } = useLanguage();
+  const [activeToolId, setActiveToolId] = useState<string>('eligibility-matcher');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'form' | 'exam' | 'prep'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -53,6 +59,8 @@ export const CandidateToolsView: React.FC<CandidateToolsViewProps> = ({ onNaviga
 
   const renderActiveTool = () => {
     switch (activeToolId) {
+      case 'eligibility-matcher':
+        return <EligibilityMatcher jobs={jobs} onSelectJob={(job) => onNavigate('job-detail', job.id)} />;
       case 'photo-date':
         return <PhotoDateAdder />;
       case 'age-eligibility':
@@ -78,7 +86,7 @@ export const CandidateToolsView: React.FC<CandidateToolsViewProps> = ({ onNaviga
       case 'normalization':
         return <CbtMarksNormalizer />;
       default:
-        return <PhotoDateAdder />;
+        return <EligibilityMatcher jobs={jobs} onSelectJob={(job) => onNavigate('job-detail', job.id)} />;
     }
   };
 
