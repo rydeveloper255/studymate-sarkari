@@ -25,6 +25,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: BUN_VERSION
+        value: "1.2.2"
       # Supabase Credentials (set in Render Dashboard)
       - key: SUPABASE_URL
         sync: false
