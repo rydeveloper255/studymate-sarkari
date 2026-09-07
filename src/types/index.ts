@@ -19,6 +19,69 @@ export interface ImportantDate {
   isTentative?: boolean;
 }
 
+export interface CategoryVacancyBreakdown {
+  ur: number;
+  ews: number;
+  obc: number;
+  sc: number;
+  st: number;
+  female?: number;
+  total: number;
+}
+
+export interface PhysicalStandards {
+  heightMale?: string;
+  heightFemale?: string;
+  chestMale?: string;
+  runningMale?: string;
+  runningFemale?: string;
+}
+
+export interface CandidateDirectLoginLinks {
+  otrApplyUrl?: string;
+  admitCardLoginUrl?: string;
+  marksheetResultUrl?: string;
+  appStatusUrl?: string;
+}
+
+export interface SmartScheduleStatus {
+  isPeakHour: boolean;
+  activeMode: 'PEAK' | 'OFF_PEAK';
+  intervalSeconds: number;
+  nextRunInSeconds: number;
+  peakWindow: string;
+  manualPeakOverride: boolean;
+  activeSourcesCrawling: number;
+}
+
+export interface EmploymentGazetteItem {
+  id: string;
+  editionDate: string;
+  title: string;
+  department: string;
+  category: JobCategory;
+  vacancies: string;
+  qualification: string;
+  expectedPortalRelease: string;
+  gazetteSnippet: string;
+  isAdvanceNotice: boolean;
+  sourceIssueNo: string;
+}
+
+export interface AntiCrashMirrorPdf {
+  id: string;
+  jobId: string;
+  title: string;
+  sourceCommission: string;
+  fileSizeBytes: string;
+  mirrorEndpoint: string;
+  originalUrl: string;
+  cdnStatus: 'CACHED_HOT' | 'MIRROR_READY' | 'STREAMING';
+  cachedAt: string;
+  downloadsServed: number;
+  downloadSpeed: string;
+}
+
 export interface PostEligibility {
   postName: string;
   postCode: string;
@@ -84,6 +147,11 @@ export interface JobItem {
   normalizationNote?: string;
   directLinks: DirectLink[];
   faqs: { question: string; answer: string }[];
+  categoryVacancies?: CategoryVacancyBreakdown;
+  physicalStandards?: PhysicalStandards;
+  directCandidateLogins?: CandidateDirectLoginLinks;
+  mirrorPdfUrl?: string;
+  urgencyBadge?: 'CLOSING_SOON' | 'JUST_OUT' | 'MEGA_BHARTI' | 'RESULT_LIVE';
 }
 
 export interface AdmitCardItem {

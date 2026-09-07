@@ -307,26 +307,49 @@ export const LatestJobsView: React.FC<LatestJobsViewProps> = ({
                         <span className="font-bold text-[#0b1c30] truncate block">{job.qualificationLevel}</span>
                       </div>
                     </div>
+
+                    {/* Category Seats Quick Bar */}
+                    {job.categoryVacancies && (
+                      <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
+                        <span className="text-[#757682] uppercase text-[9px]">Quotas:</span>
+                        <span className="bg-[#00236f]/10 text-[#00236f] px-1.5 py-0.5 rounded">UR: {job.categoryVacancies.ur}</span>
+                        <span className="bg-[#fe932c]/10 text-[#904d00] px-1.5 py-0.5 rounded">OBC: {job.categoryVacancies.obc}</span>
+                        <span className="bg-[#85f8c4]/30 text-[#004a32] px-1.5 py-0.5 rounded">EWS: {job.categoryVacancies.ews}</span>
+                        <span className="bg-[#e11d48]/10 text-[#e11d48] px-1.5 py-0.5 rounded">SC: {job.categoryVacancies.sc}</span>
+                        <span className="bg-[#7c3aed]/10 text-[#7c3aed] px-1.5 py-0.5 rounded">ST: {job.categoryVacancies.st}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Actions Row */}
                   <div className="mt-4 pt-3 border-t border-[#eff4ff] flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-1.5 text-[11px] text-[#004a32] font-bold">
-                      <span className="material-symbols-outlined text-[16px]">verified</span>
-                      <span>Official Gazette Verified</span>
+                    <div className="flex items-center gap-2 text-[11px] font-bold">
+                      <span className="flex items-center gap-1 text-[#004a32]">
+                        <span className="material-symbols-outlined text-[16px]">verified</span>
+                        <span>Gazette Verified</span>
+                      </span>
+                      <a
+                        href={`/api/mirror-download?key=${job.id}`}
+                        download
+                        className="text-[#00236f] hover:underline flex items-center gap-1 text-[10px] bg-[#eff4ff] px-2 py-0.5 rounded"
+                        title="Anti-Crash CDN Mirror PDF"
+                      >
+                        <span className="material-symbols-outlined text-[12px]">cloud_download</span>
+                        <span>CDN Mirror PDF</span>
+                      </a>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => onSelectJob(job.id)}
-                        className="bg-[#eff4ff] hover:bg-[#dce9ff] text-[#00236f] text-xs font-bold px-3.5 py-2 rounded-lg transition-colors flex items-center gap-1"
+                        className="bg-[#eff4ff] hover:bg-[#dce9ff] text-[#00236f] text-xs font-bold px-3 py-2 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                       >
                         <span className="material-symbols-outlined text-[16px]">visibility</span>
-                        View Full Details
+                        Details &amp; Story Card
                       </button>
                       <button
                         onClick={() => onSelectJob(job.id)}
-                        className="bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold px-4 py-2 rounded-lg shadow-xs transition-colors flex items-center gap-1"
+                        className="bg-[#00236f] hover:bg-[#1e3a8a] text-white text-xs font-bold px-3.5 py-2 rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
                       >
                         Apply Online
                         <span className="material-symbols-outlined text-[14px]">arrow_forward</span>

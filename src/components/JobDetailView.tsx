@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { JobItem } from '../types';
 import { JobPdfSummaryModal } from './JobPdfSummaryModal';
 import { JobDiscussionForum } from './JobDiscussionForum';
+import { StoryCardModal } from './StoryCardModal';
+import { EligibilityCalculatorModal } from './EligibilityCalculatorModal';
 import { useLanguage } from '../context/LanguageContext';
 
 export interface JobDetailViewProps {
@@ -24,6 +26,9 @@ export const JobDetailView: React.FC<JobDetailViewProps> = ({
   const [shareSuccess, setShareSuccess] = useState<string | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
+  const [showStoryModal, setShowStoryModal] = useState(false);
+  const [showEligibilityModal, setShowEligibilityModal] = useState(false);
+  const [mirrorDownloading, setMirrorDownloading] = useState(false);
 
   // Interactive Countdown Timer
   const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number }>({
@@ -259,6 +264,57 @@ ${getShareUrl()}
               </span>
               <span className="hidden md:inline">{isSaved ? 'Saved in Aspirant Zone' : 'Bookmark Job'}</span>
             </button>
+
+            {/* 1. WhatsApp & Insta Story Card (9:16) */}
+            <button
+              onClick={() => setShowStoryModal(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-[#ba1a1a] to-[#e11d48] text-white hover:opacity-90 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+              title="Create 9:16 Vertical Story Image for WhatsApp Status"
+            >
+              <span className="material-symbols-outlined text-[18px]">crop_portrait</span>
+              <span>WhatsApp Story (9:16)</span>
+            </button>
+
+            {/* 2. Interactive Am I Eligible Calculator */}
+            <button
+              onClick={() => setShowEligibilityModal(true)}
+              className="px-3 py-1.5 rounded-xl text-xs font-black bg-[#85f8c4] text-[#002114] hover:bg-[#85f8c4]/90 transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-95"
+              title="Verify your Age, Category & Qualification instantly"
+            >
+              <span className="material-symbols-outlined text-[18px]">verified_user</span>
+              <span>Am I Eligible?</span>
+            </button>
+
+            {/* 3. Anti-Crash CDN Mirror PDF */}
+            <a
+              href={`/api/mirror-download?key=${job.id}`}
+              download
+              onClick={() => {
+                setMirrorDownloading(true);
+                setTimeout(() => setMirrorDownloading(false), 2000);
+              }}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#00164e] text-[#85f8c4] border border-[#85f8c4]/40 hover:bg-[#00236f] transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+              title="Anti-Crash High Speed CDN Mirror PDF Download"
+            >
+              <span className="material-symbols-outlined text-[18px]">cloud_download</span>
+              <span>{mirrorDownloading ? 'Mirror Downloading...' : '⚡ Anti-Crash CDN Mirror'}</span>
+            </a>
+          </div>
+        </div>
+
+        {/* Dynamic Urgency & Countdown Badge */}
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400 text-xs font-black animate-pulse">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600"></span>
+            </span>
+            <span>🚨 FORM CLOSING IN {timeLeft.days} DAYS, {timeLeft.hours} HOURS</span>
+          </div>
+
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-[#00236f] dark:text-[#90a8ff] text-xs font-bold">
+            <span className="material-symbols-outlined text-[16px]">speed</span>
+            <span>Official CDN Mirror: Active (64 MB/s Edge Cache)</span>
           </div>
         </div>
 
@@ -455,14 +511,142 @@ ${getShareUrl()}
                 </tbody>
               </table>
             </div>
+
+            {/* Category-Wise Vacancy Distribution Matrix & Visual Bars */}
+            <div className="mt-5 p-4 bg-[#eff4ff] dark:bg-white/5 rounded-xl border border-[#d3e4fe] dark:border-white/10">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[#00236f] dark:text-[#90a8ff] text-[20px]">donut_large</span>
+                  <h3 className="font-display font-black text-xs uppercase tracking-wider text-[#00236f] dark:text-[#90a8ff]">
+                    Category-Wise Vacancy Matrix (आरक्षण वार सीटें)
+                  </h3>
+                </div>
+                <span className="text-[11px] font-mono font-bold text-[#00236f] dark:text-white bg-white dark:bg-black/30 px-2 py-0.5 rounded border border-[#d3e4fe] dark:border-white/10">
+                  Total: {job.vacanciesFormatted} Posts
+                </span>
+              </div>
+
+              {(() => {
+                const total = job.categoryVacancies?.total || job.vacanciesCount || 1000;
+                const ur = job.categoryVacancies?.ur || Math.round(total * 0.40);
+                const obc = job.categoryVacancies?.obc || Math.round(total * 0.27);
+                const ews = job.categoryVacancies?.ews || Math.round(total * 0.10);
+                const sc = job.categoryVacancies?.sc || Math.round(total * 0.15);
+                const st = job.categoryVacancies?.st || Math.max(1, total - (ur + obc + ews + sc));
+
+                const categories = [
+                  { label: 'UR (General)', count: ur, color: 'bg-[#00236f]', pct: Math.round((ur / total) * 100) },
+                  { label: 'OBC (Non-Creamy)', count: obc, color: 'bg-[#fe932c]', pct: Math.round((obc / total) * 100) },
+                  { label: 'EWS (10% Quota)', count: ews, color: 'bg-[#85f8c4]', pct: Math.round((ews / total) * 100) },
+                  { label: 'SC (15% Quota)', count: sc, color: 'bg-[#e11d48]', pct: Math.round((sc / total) * 100) },
+                  { label: 'ST (7.5% Quota)', count: st, color: 'bg-[#7c3aed]', pct: Math.round((st / total) * 100) },
+                ];
+
+                return (
+                  <div className="space-y-3">
+                    {/* Multi-segment distribution progress bar */}
+                    <div className="w-full h-3.5 bg-black/10 rounded-full overflow-hidden flex shadow-inner">
+                      {categories.map((c, i) => (
+                        <div
+                          key={i}
+                          style={{ width: `${c.pct}%` }}
+                          className={`${c.color} h-full transition-all`}
+                          title={`${c.label}: ${c.count} (${c.pct}%)`}
+                        />
+                      ))}
+                    </div>
+
+                    {/* Category Stat Cards */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-1">
+                      {categories.map((c, i) => (
+                        <div key={i} className="p-2.5 bg-white dark:bg-black/30 rounded-lg border border-[#d3e4fe] dark:border-white/10 text-center">
+                          <span className="text-[10px] font-bold text-[#757682] uppercase block truncate">{c.label}</span>
+                          <span className="font-extrabold text-sm text-[#00236f] dark:text-white block mt-0.5">
+                            {c.count.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] font-bold text-[#008851] dark:text-[#85f8c4]">
+                            {c.pct}% Seats
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Physical Standards (PST/PET) Table if available */}
+            {job.physicalStandards && (
+              <div className="mt-5 p-4 bg-[#ffdcc3]/30 rounded-xl border border-[#ffb77d]">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="material-symbols-outlined text-[#904d00] text-[20px]">fitness_center</span>
+                  <h3 className="font-display font-black text-xs uppercase tracking-wider text-[#904d00]">
+                    Physical Standard &amp; Endurance Test (PST / PET)
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 bg-white dark:bg-black/30 rounded-lg border border-[#ffb77d]/40">
+                    <strong className="text-[#904d00] block mb-1">👨 Male Candidates:</strong>
+                    <ul className="space-y-1 text-[#444651] dark:text-white/80">
+                      <li>• Height: <strong>{job.physicalStandards.heightMale || '168 cms'}</strong></li>
+                      <li>• Chest: <strong>{job.physicalStandards.chestMale || '79-84 cms'}</strong></li>
+                      <li>• Running: <strong>{job.physicalStandards.runningMale || '4.8 km in 28 mins'}</strong></li>
+                    </ul>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-black/30 rounded-lg border border-[#ffb77d]/40">
+                    <strong className="text-[#904d00] block mb-1">👩 Female Candidates:</strong>
+                    <ul className="space-y-1 text-[#444651] dark:text-white/80">
+                      <li>• Height: <strong>{job.physicalStandards.heightFemale || '152 cms'}</strong></li>
+                      <li>• Running: <strong>{job.physicalStandards.runningFemale || '2.4 km in 16 mins'}</strong></li>
+                      <li>• Minimum Weight: <strong>40 kg</strong></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Section 5: Selection Process & Tier-I CBT Exam Pattern */}
           <div id="pattern" className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs scroll-mt-36">
             <h2 className="font-display font-extrabold text-lg text-[#00236f] flex items-center gap-2 mb-4">
               <span className="material-symbols-outlined text-[22px]">analytics</span>
-              5. Selection Stages & Tier-I Exam Pattern (100 MCQs, 200 Marks)
+              5. Selection Stages &amp; Subject-Wise Marks Weightage
             </h2>
+
+            {/* Subject-Wise Marks Weightage Visual Chart */}
+            <div className="mb-5 space-y-2.5 bg-[#eff4ff] p-4 rounded-xl border border-[#d3e4fe]">
+              <span className="text-[11px] font-bold text-[#00236f] uppercase tracking-wider block">
+                Subject-Wise Marks Weightage &amp; Scoring Distribution
+              </span>
+              {(() => {
+                const totalMarks = job.examPatternTier1.reduce((acc, s) => acc + s.marks, 0) || 200;
+                return (
+                  <div className="space-y-2 pt-1">
+                    {job.examPatternTier1.map((sec, idx) => {
+                      const pct = Math.round((sec.marks / totalMarks) * 100);
+                      const colors = ['bg-[#00236f]', 'bg-[#25D366]', 'bg-[#fe932c]', 'bg-[#7c3aed]'];
+                      return (
+                        <div key={idx} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-[#0b1c30] truncate max-w-xs">{sec.section}</span>
+                            <span className="font-mono font-bold text-[#00236f]">
+                              {sec.marks} Marks ({pct}%) • {sec.questions} MCQs
+                            </span>
+                          </div>
+                          <div className="w-full h-2.5 bg-black/10 rounded-full overflow-hidden">
+                            <div
+                              style={{ width: `${pct}%` }}
+                              className={`${colors[idx % colors.length]} h-full rounded-full transition-all`}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </div>
+
             <div className="overflow-hidden rounded-xl border border-[#eff4ff] mb-4">
               <table className="w-full text-xs text-left">
                 <thead className="bg-[#00236f] text-white font-bold">
@@ -563,6 +747,93 @@ ${getShareUrl()}
                   </a>
                 </div>
               ))}
+            </div>
+
+            {/* Direct 1-Click Candidate Deep-Linking System */}
+            <div className="mt-5 p-4 bg-[#eff4ff] dark:bg-white/5 rounded-xl border border-[#d3e4fe] dark:border-white/10">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-[#00236f] dark:text-[#90a8ff] text-[20px]">fingerprint</span>
+                <h3 className="font-display font-black text-xs uppercase tracking-wider text-[#00236f] dark:text-[#90a8ff]">
+                  Candidate Direct 1-Click Login Deep-Links (सीधे लॉगिन लिंक)
+                </h3>
+              </div>
+              <p className="text-[11px] text-[#444651] dark:text-white/70 mb-3">
+                Bypass lengthy portal homepages. Directly jump into official candidate portals for OTR, hall ticket, score card, and tracking.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <a
+                  href={job.directCandidateLogins?.otrApplyUrl || job.applyUrl || 'https://ssc.gov.in'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white dark:bg-black/30 rounded-xl border border-[#d3e4fe] dark:border-white/10 hover:border-[#00236f] transition-all flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-lg bg-[#00236f]/10 text-[#00236f] flex items-center justify-center group-hover:bg-[#00236f] group-hover:text-white transition-colors">
+                      <span className="material-symbols-outlined text-[18px]">how_to_reg</span>
+                    </span>
+                    <div>
+                      <span className="font-bold text-xs text-[#00236f] dark:text-white block">One-Time Registration (OTR)</span>
+                      <span className="text-[10px] text-[#757682]">Direct Candidate Sign-Up / New User</span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[16px] text-[#757682] group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+                </a>
+
+                <a
+                  href={job.directCandidateLogins?.admitCardLoginUrl || `https://ssc.gov.in/admit-card`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white dark:bg-black/30 rounded-xl border border-[#d3e4fe] dark:border-white/10 hover:border-[#00236f] transition-all flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-lg bg-[#fe932c]/10 text-[#904d00] flex items-center justify-center group-hover:bg-[#fe932c] group-hover:text-[#2f1500] transition-colors">
+                      <span className="material-symbols-outlined text-[18px]">badge</span>
+                    </span>
+                    <div>
+                      <span className="font-bold text-xs text-[#00236f] dark:text-white block">Admit Card / City Slip Login</span>
+                      <span className="text-[10px] text-[#757682]">Download Hall Ticket with Reg ID</span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[16px] text-[#757682] group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+                </a>
+
+                <a
+                  href={job.directCandidateLogins?.marksheetResultUrl || `https://ssc.gov.in/results`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white dark:bg-black/30 rounded-xl border border-[#d3e4fe] dark:border-white/10 hover:border-[#00236f] transition-all flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-lg bg-[#85f8c4]/20 text-[#004a32] flex items-center justify-center group-hover:bg-[#85f8c4] group-hover:text-[#002114] transition-colors">
+                      <span className="material-symbols-outlined text-[18px]">military_tech</span>
+                    </span>
+                    <div>
+                      <span className="font-bold text-xs text-[#00236f] dark:text-white block">Result &amp; Marksheet Module</span>
+                      <span className="text-[10px] text-[#757682]">Direct Candidate Score Card Login</span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[16px] text-[#757682] group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+                </a>
+
+                <a
+                  href={job.directCandidateLogins?.appStatusUrl || `https://ssc.gov.in/application-status`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="p-3 bg-white dark:bg-black/30 rounded-xl border border-[#d3e4fe] dark:border-white/10 hover:border-[#00236f] transition-all flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-8 h-8 rounded-lg bg-[#e11d48]/10 text-[#e11d48] flex items-center justify-center group-hover:bg-[#e11d48] group-hover:text-white transition-colors">
+                      <span className="material-symbols-outlined text-[18px]">track_changes</span>
+                    </span>
+                    <div>
+                      <span className="font-bold text-xs text-[#00236f] dark:text-white block">Application Form Status</span>
+                      <span className="text-[10px] text-[#757682]">Check Form Accepted / Rejected Status</span>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[16px] text-[#757682] group-hover:translate-x-0.5 transition-transform">arrow_forward</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -745,11 +1016,19 @@ ${getShareUrl()}
         </button>
 
         <button
-          onClick={handleNativeShare}
-          className="flex-1 bg-[#eff4ff] hover:bg-[#dce9ff] text-[#00236f] text-xs font-bold py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 border border-[#d3e4fe] cursor-pointer active:scale-95 transition-all"
+          onClick={() => setShowStoryModal(true)}
+          className="bg-gradient-to-r from-[#ba1a1a] to-[#e11d48] text-white p-2.5 rounded-xl flex items-center justify-center shadow-xs cursor-pointer active:scale-95"
+          title="WhatsApp Story Card (9:16)"
         >
-          <span className="material-symbols-outlined text-[18px]">share</span>
-          <span>Share Job</span>
+          <span className="material-symbols-outlined text-[20px]">crop_portrait</span>
+        </button>
+
+        <button
+          onClick={() => setShowEligibilityModal(true)}
+          className="bg-[#85f8c4] text-[#002114] p-2.5 rounded-xl flex items-center justify-center shadow-xs cursor-pointer active:scale-95 font-bold"
+          title="Check Eligibility"
+        >
+          <span className="material-symbols-outlined text-[20px]">verified_user</span>
         </button>
 
         <button
@@ -761,12 +1040,12 @@ ${getShareUrl()}
         </button>
 
         <a
-          href="https://ssc.gov.in"
+          href={job.directCandidateLogins?.otrApplyUrl || job.applyUrl || 'https://ssc.gov.in'}
           target="_blank"
           rel="noreferrer"
           className="flex-1 bg-[#fe932c] hover:bg-[#fe932c]/90 text-[#2f1500] text-xs font-black py-2.5 px-3 rounded-xl flex items-center justify-center gap-1 shadow-sm text-center"
         >
-          <span>Apply Now</span>
+          <span>Apply (OTR)</span>
           <span className="material-symbols-outlined text-[16px]">open_in_new</span>
         </a>
       </div>
@@ -869,6 +1148,20 @@ ${getShareUrl()}
       <JobPdfSummaryModal
         isOpen={isPdfModalOpen}
         onClose={() => setIsPdfModalOpen(false)}
+        job={job}
+      />
+
+      {/* 11. WhatsApp/Insta Story Card Modal (9:16) */}
+      <StoryCardModal
+        isOpen={showStoryModal}
+        onClose={() => setShowStoryModal(false)}
+        job={job}
+      />
+
+      {/* 12. Smart Interactive Eligibility Calculator Modal */}
+      <EligibilityCalculatorModal
+        isOpen={showEligibilityModal}
+        onClose={() => setShowEligibilityModal(false)}
         job={job}
       />
     </div>

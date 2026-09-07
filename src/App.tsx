@@ -18,6 +18,7 @@ import { PWAInstallPopup } from './components/PWAInstallPopup';
 import { QuickCategoryBar } from './components/QuickCategoryBar';
 import { PushNotificationModal } from './components/PushNotificationModal';
 import { EligibilityMatcher } from './components/EligibilityMatcher';
+import { StickyChannelBar } from './components/StickyChannelBar';
 
 import {
   MOCK_JOBS,
@@ -434,6 +435,9 @@ export function App() {
         isOpen={isPushModalOpen}
         onClose={() => setIsPushModalOpen(false)}
       />
+
+      {/* Sticky Channel & Breaking Alerts Bar */}
+      {activeTab !== 'job-detail' && <StickyChannelBar />}
 
       {/* Global Footer */}
       <Footer onNavigate={handleNavigate} isAdmin={isAdmin} />

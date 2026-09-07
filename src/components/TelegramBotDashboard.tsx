@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { GovernmentSource, TelegramBotLog, JobItem, AdmitCardItem, ResultItem, AnswerKeyItem } from '../types';
 import { supabaseService, SupabaseConfig } from '../services/supabaseService';
 import { SmartBotFeaturesTab } from './SmartBotFeaturesTab';
+import { SarkariEngineManager } from './SarkariEngineManager';
 import { WhatsAppChannelBroadcaster, WHATSAPP_CHANNEL_URL } from './WhatsAppChannelBroadcaster';
 import { TelegramChannelBroadcaster, TELEGRAM_CHANNEL_URL, TELEGRAM_CHANNEL_HANDLE } from './TelegramChannelBroadcaster';
 
@@ -32,7 +33,7 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
   onNavigate,
   onExitAdmin,
 }) => {
-  const [activeTab, setActiveTab] = useState<'bot_admin' | 'overview' | 'telegram_channel' | 'whatsapp' | 'smart' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('bot_admin');
+  const [activeTab, setActiveTab] = useState<'sarkari_engine' | 'bot_admin' | 'overview' | 'telegram_channel' | 'whatsapp' | 'smart' | 'render' | 'links' | 'supabase' | 'code' | 'instructions'>('sarkari_engine');
   const [selectedCodeFile, setSelectedCodeFile] = useState<'bot.py' | 'whatsapp_bot.py' | 'config.py' | 'scrapers.py' | 'render.yaml' | 'sql'>('whatsapp_bot.py');
   const [copiedKey, setCopiedKey] = useState(false);
   const [isTestingTelegram, setIsTestingTelegram] = useState(false);
@@ -270,6 +271,7 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
       {/* 3. Navigation Tabs */}
       <div className="flex items-center gap-2 bg-white p-2 rounded-2xl border border-[#d3e4fe] shadow-xs overflow-x-auto scrollbar-none">
         {[
+          { id: 'sarkari_engine', label: 'SarkariResult Engine (Scraper + Bot) ⚡', icon: 'travel_explore', highlight: 'engine' },
           { id: 'bot_admin', label: 'Bot as Admin Panel 🤖👑', icon: 'admin_panel_settings', highlight: 'admin' },
           { id: 'overview', label: 'Dashboard & Activity Logs', icon: 'dashboard' },
           { id: 'telegram_channel', label: 'Telegram Channel Suite 📢', icon: 'send', highlight: 'telegram' },
@@ -286,13 +288,17 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
             onClick={() => setActiveTab(tab.id as any)}
             className={`py-2.5 px-4 rounded-xl text-xs md:text-[13px] font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
               activeTab === tab.id
-                ? tab.highlight === 'admin'
+                ? tab.highlight === 'engine'
+                  ? 'bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-900 text-white shadow-md ring-2 ring-blue-400/40'
+                  : tab.highlight === 'admin'
                   ? 'bg-gradient-to-r from-[#b45309] to-[#7c2d12] text-white shadow-md ring-2 ring-amber-400/40'
                   : tab.highlight === 'whatsapp'
                   ? 'bg-[#075E54] text-white shadow-xs'
                   : tab.highlight === 'telegram'
                   ? 'bg-[#0284c7] text-white shadow-xs'
                   : 'bg-[#00236f] text-white shadow-xs'
+                : tab.highlight === 'engine'
+                ? 'bg-blue-50 text-blue-900 hover:bg-blue-100 border border-blue-200'
                 : tab.highlight === 'admin'
                 ? 'bg-amber-100 text-amber-950 hover:bg-amber-200 border border-amber-300'
                 : tab.highlight === 'whatsapp'
@@ -307,6 +313,11 @@ export const TelegramBotDashboard: React.FC<TelegramBotDashboardProps> = ({
           </button>
         ))}
       </div>
+
+      {/* 3.4 Tab: SarkariResult Engine (Scraper + Bot 9+9) */}
+      {activeTab === 'sarkari_engine' && (
+        <SarkariEngineManager />
+      )}
 
       {/* 3.5 Tab: Bot as Admin Panel (कंट्रोल पैनल) */}
       {activeTab === 'bot_admin' && (
