@@ -154,6 +154,14 @@ export interface JobItem {
   urgencyBadge?: 'CLOSING_SOON' | 'JUST_OUT' | 'MEGA_BHARTI' | 'RESULT_LIVE';
 }
 
+export interface RegionalPortalLink {
+  region: string;
+  states: string;
+  server: string;
+  url: string;
+  directLoginUrl?: string;
+}
+
 export interface AdmitCardItem {
   id: string;
   title: string;
@@ -168,8 +176,14 @@ export interface AdmitCardItem {
   totalCenters?: string;
   citySlipUrl: string;
   hallTicketUrl: string;
+  directLoginUrl?: string; // Direct Roll No & DOB candidate login form
+  server2Url?: string; // Alternate mirror server
+  officialNoticePdfUrl?: string; // Direct circular PDF
+  serverStatus?: 'fast' | 'moderate' | 'heavy_traffic';
   requirements: string;
   updatedTime: string;
+  regionalLinks?: RegionalPortalLink[];
+  downloadSteps?: string[];
 }
 
 export interface ResultItem {
@@ -182,8 +196,13 @@ export interface ResultItem {
   totalPosts: string;
   resultType: 'Final Result' | 'Tier 1 Result' | 'Score Card' | 'Merit List' | 'Waiting List';
   downloadUrl: string;
+  scorecardLoginUrl?: string; // Direct Candidate Login for marks
+  server2Url?: string; // Alternate Mirror
+  meritListPdfUrl?: string; // Direct PDF with selected roll numbers
   cutOffUrl?: string;
   cutoffSummary?: { [category: string]: string };
+  howToCheckSteps?: string[];
+  serverStatus?: 'fast' | 'moderate' | 'heavy_traffic';
   isNew?: boolean;
 }
 
@@ -197,8 +216,12 @@ export interface AnswerKeyItem {
   feePerQuestion: string;
   status: 'Objection Window Open' | 'Final Answer Key' | 'Provisional Key';
   answerKeyUrl: string;
+  directLoginUrl?: string; // Direct Response Sheet & Question Paper Login
+  server2Url?: string;
   challengePortalUrl: string;
   totalQuestions?: number;
+  objectionSteps?: string[];
+  serverStatus?: 'fast' | 'moderate' | 'heavy_traffic';
 }
 
 export interface StateInfo {
@@ -291,6 +314,20 @@ export interface TelegramBannerConfig {
   lastDate: string;
   stateOrCentral: string;
   badgeType: 'NEW_JOB' | 'LAST_DATE' | 'ADMIT_CARD' | 'RESULT' | 'ANSWER_KEY';
+}
+
+export interface PreVacancyNoticeItem {
+  id: string;
+  title: string;
+  department: string;
+  category: JobCategory;
+  noticeType: 'Short Notice' | 'Upcoming Vacancy' | 'Exam Calendar' | 'Rozgar Samachar' | 'Corrigendum';
+  expectedDate?: string;
+  expectedVacancies?: string;
+  officialPdfUrl?: string;
+  sourceUrl: string;
+  releaseDate: string;
+  isNew?: boolean;
 }
 
 

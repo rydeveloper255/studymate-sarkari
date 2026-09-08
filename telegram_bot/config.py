@@ -54,15 +54,14 @@ SCRAPING_BATCH_SIZE = int(os.getenv("SCRAPING_BATCH_SIZE", 15))
 SCRAPING_BATCH_DELAY_SECONDS = float(os.getenv("SCRAPING_BATCH_DELAY_SECONDS", 2.0))
 
 # =====================================================================
-# MANDATORY DATE CUTOFF: STRICTLY 1 AUGUST 2026 ONWARDS
+# MANDATORY DATE CUTOFF: ACTIVE ONGOING NOTICES (2024, 2025, 2026 & 2027)
 # =====================================================================
-# The bot is strictly instructed to ONLY scrape and broadcast notices,
-# vacancies, admit cards, results, and answer keys dated on or after
-# 1 August 2026. Any circulars from before 1 August 2026 (or earlier years)
-# are automatically rejected and discarded.
-MIN_SCRAPE_DATE_STR = "2026-08-01"
-MIN_SCRAPE_YEAR = 2026
-MIN_SCRAPE_MONTH = 8
+# Scrapes active and current notices, vacancies, admit cards, results,
+# answer keys, and pre-vacancy notifications. Old obsolete archives (before 2024)
+# are discarded, ensuring all active recruitment cycles are fully captured.
+MIN_SCRAPE_DATE_STR = "2024-01-01"
+MIN_SCRAPE_YEAR = 2024
+MIN_SCRAPE_MONTH = 1
 MIN_SCRAPE_DAY = 1
 
 
@@ -639,10 +638,36 @@ STATE_WISE_GOVT_LINKS = [
 # 4. KEYWORD MAPPING RULES
 # =====================================================================
 KEYWORD_MAPPINGS = {
-    "Admit Card": ["admit card", "hall ticket", "call letter", "city slip", "city intimation", "e-admit", "tac"],
-    "Results": ["result", "merit list", "selected candidates", "cut off", "score card", "marks", "rank list", "selection list"],
-    "Answer Key": ["answer key", "response sheet", "objection", "master question paper", "answer keys", "key answer sheet"],
-    "Jobs": ["recruitment", "vacancy", "notification", "apply online", "advertisement", "posts", "bharti", "cgl", "chsl", "mts"]
+    "Admit Card": [
+        "admit card", "hall ticket", "call letter", "city slip", "city intimation",
+        "e-admit", "tac", "interview letter", "call-letter", "pravesh patra",
+        "admit-card", "admission certificate", "exam slip", "hallticket", "download admit"
+    ],
+    "Results": [
+        "result", "merit list", "selected candidates", "cut off", "cutoff",
+        "score card", "scorecard", "marks", "rank list", "selection list",
+        "final list", "parinam", "recommended candidates", "qualified candidates",
+        "marksheet", "allotment list", "tier-1 result", "tier-2 result", "cbt result"
+    ],
+    "Answer Key": [
+        "answer key", "response sheet", "objection", "master question paper",
+        "answer keys", "key answer sheet", "tentative key", "model answer",
+        "uttar kunji", "answer-key", "provisional key", "challenge", "omr sheet",
+        "question paper with key"
+    ],
+    "Pre-Vacancy / Notification": [
+        "short notice", "short notification", "upcoming", "advance notice",
+        "employment news", "rozgar samachar", "calendar", "exam calendar",
+        "tentative calendar", "corrigendum", "addendum", "press note",
+        "press release", "recruitment notice", "pre-notification", "gazette notification",
+        "advertisement notice", "schedule of examination", "important notice",
+        "upcoming vacancy", "revised schedule"
+    ],
+    "Jobs": [
+        "recruitment", "vacancy", "notification", "apply online", "advertisement",
+        "posts", "bharti", "cgl", "chsl", "mts", "advt", "online form",
+        "opening", "direct recruitment", "online application", "walk-in", "engagement"
+    ]
 }
 
 

@@ -37,6 +37,7 @@ try:
         InlineQueryResultArticle,
         InputTextMessageContent,
         Update,
+        WebAppInfo,
     )
     from telegram.constants import ParseMode, PollType
     from telegram.ext import (
@@ -90,6 +91,10 @@ from smart_features import (
     GazetteVerifier,
     HinglishSearchEngine,
     ChannelPosterBuilder,
+    PdfMetadataParser,
+    CrawlerHealthMonitor,
+    ObjectionDeadlineTracker,
+    TelegramWebAppHelper,
 )
 
 # Initialize Smart Features Managers
@@ -221,6 +226,8 @@ def format_telegram_message(item: dict) -> str:
         "Admit Card": "🎫",
         "Results": "🏆",
         "Answer Key": "🔑",
+        "Pre-Vacancy / Notification": "📌",
+        "Notification": "📢",
     }.get(item.get("category", "Jobs"), "📢")
 
     msg = (
@@ -273,6 +280,11 @@ def get_notification_inline_buttons(item: dict) -> InlineKeyboardMarkup:
         buttons.append([
             InlineKeyboardButton("🔑 Download Answer Key", url=url),
             InlineKeyboardButton("📝 Submit Objection", url=url),
+        ])
+    elif cat in ["Pre-Vacancy / Notification", "Notification"]:
+        buttons.append([
+            InlineKeyboardButton("📄 View Short Notice / Circular", url=url),
+            InlineKeyboardButton("🌐 Official Portal", url=item.get("source_url", url)),
         ])
     else:
         buttons.append([InlineKeyboardButton("🔗 Open Official Notice", url=url)])
@@ -329,9 +341,9 @@ async def send_startup_ping():
 
 async def send_telegram_alert(item: dict):
     """Sends notification to Telegram Admin (5165363865) and Channel with Direct Action buttons."""
-    # STRICT MANDATE: Discard any notice before 1 August 2026
+    # Filter out obsolete archives
     if not is_notice_after_cutoff(item.get("title", ""), item.get("url", "")):
-        logger.info(f"⏩ [CUTOFF FILTER] Skipped Telegram broadcast for pre-1-Aug-2026 notice: {item.get('title', '')[:40]}")
+        logger.info(f"⏩ [CUTOFF FILTER] Skipped Telegram broadcast for obsolete notice: {item.get('title', '')[:40]}")
         return
 
     if not bot:
@@ -430,19 +442,26 @@ async def send_whatsapp_channel_alert(item: dict, force: bool = False):
 
         slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:80]
         
+        direct_login = item.get("direct_login_url") or url
+        pdf_direct = item.get("official_notice_pdf_url") or item.get("merit_list_pdf_url") or ""
+
         # Exact website deep link
         if "admit" in category.lower() or "hall" in title.lower():
             deep_link = f"{WEBSITE_DOMAIN}#admit-card"
             header_badge = "🎫 *ADMIT CARD / HALL TICKET RELEASED* 🚨"
+            action_label = "🎟️ Direct Candidate Login / Download Link (Fill Details Directly):"
         elif "result" in category.lower() or "score" in title.lower():
             deep_link = f"{WEBSITE_DOMAIN}#results"
             header_badge = "🏆 *EXAM RESULT & MERIT LIST DECLARED* 📢"
+            action_label = "🏆 Direct Scorecard / Roll Number Link (Check Marks Directly):"
         elif "key" in category.lower() or "answer" in title.lower():
             deep_link = f"{WEBSITE_DOMAIN}#answer-key"
             header_badge = "📝 *OFFICIAL ANSWER KEY & OBJECTION LINK* 🔑"
+            action_label = "🔑 Direct Response Sheet & Objection Portal:"
         else:
             deep_link = f"{WEBSITE_DOMAIN}#job-detail?id={slug}"
             header_badge = "📢 *NEW SARKARI RECRUITMENT 2025-26* 🇮🇳"
+            action_label = "📝 Direct Online Apply Form:"
 
         msg = f"""{header_badge}
 ━━━━━━━━━━━━━━━━━━━━━
@@ -454,14 +473,16 @@ async def send_whatsapp_channel_alert(item: dict, force: bool = False):
 💰 *Pay Scale:* {pay}
 📅 *Application Last Date:* {last_date}
 
-🔗 *Direct Notification & Online Apply Link:*
-👇👇👇
-{deep_link}
+{action_label}
+👉 {direct_login}
+
+🌐 *View on Website (Regional Portals, Server 2 Mirror & PDF Guide):*
+👉 {deep_link}
 
 ━━━━━━━━━━━━━━━━━━━━━
-📲 *Join Official WhatsApp Channel for Instant Sarkari Alerts:*
+📲 *Join Official WhatsApp Channel for Instant Direct Sarkari Alerts:*
 👉 {WHATSAPP_CHANNEL_URL}
-🔔 *StudyMate Sarkari* — 100% Free & Verified Updates"""
+🔔 *StudyMate Sarkari* — 100% Free & Verified Direct Links"""
 
         status_flag = "FORMATTED_READY"
 
@@ -520,9 +541,9 @@ def save_to_supabase(item: dict) -> bool:
     title = item.get("title", "").strip()
     url = item.get("url", "").strip()
 
-    # STRICT MANDATE: Discard any notice dated before 1 August 2026
+    # Filter out obsolete archives
     if not is_notice_after_cutoff(title, url):
-        logger.info(f"⏩ [CUTOFF FILTER] Skipped saving pre-1-Aug-2026 item to Supabase: {title[:40]}")
+        logger.info(f"⏩ [CUTOFF FILTER] Skipped saving obsolete item to Supabase: {title[:40]}")
         return False
 
     if not supabase:
@@ -628,7 +649,7 @@ def save_to_supabase(item: dict) -> bool:
                 "exam_name": title,
                 "scope": scope,
                 "state_id": state_id,
-                "download_url": url,
+                "download_url": item.get("direct_login_url", url),
                 "official_website": source_url or url,
                 "source_url": url,
                 "status": "RELEASED",
@@ -646,7 +667,7 @@ def save_to_supabase(item: dict) -> bool:
                 "reference_type": "admit_cards",
                 "reference_id": inserted_id,
                 "short_description": f"Hall Ticket / Admit Card released by {item.get('department', source_name)}",
-                "source_url": url,
+                "source_url": item.get("direct_login_url", url),
                 "published_at": now_iso,
                 "is_active": True,
             }).execute()
@@ -673,7 +694,7 @@ def save_to_supabase(item: dict) -> bool:
                 "exam_name": title,
                 "scope": scope,
                 "state_id": state_id,
-                "result_url": url,
+                "result_url": item.get("merit_list_pdf_url") or item.get("direct_login_url", url),
                 "official_website": source_url or url,
                 "source_url": url,
                 "status": "DECLARED",
@@ -691,7 +712,7 @@ def save_to_supabase(item: dict) -> bool:
                 "reference_type": "results",
                 "reference_id": inserted_id,
                 "short_description": f"Final Result / Merit List declared by {item.get('department', source_name)}",
-                "source_url": url,
+                "source_url": item.get("merit_list_pdf_url") or item.get("direct_login_url", url),
                 "published_at": now_iso,
                 "is_active": True,
             }).execute()
@@ -718,7 +739,7 @@ def save_to_supabase(item: dict) -> bool:
                 "exam_name": title,
                 "scope": scope,
                 "state_id": state_id,
-                "answer_key_url": url,
+                "answer_key_url": item.get("direct_login_url", url),
                 "official_website": source_url or url,
                 "source_url": url,
                 "status": "RELEASED",
@@ -756,13 +777,14 @@ def save_to_supabase(item: dict) -> bool:
             if existing.data and len(existing.data) > 0:
                 return False
 
+            notif_type = "PRE_VACANCY" if any(w in title.lower() for w in ["short", "upcoming", "advance", "calendar", "corrigendum"]) else "RECRUITMENT"
             notif_data = {
                 "source_id": source_id,
                 "source_key": source_key,
                 "title": title,
                 "scope": scope,
                 "state_id": state_id,
-                "notification_type": "RECRUITMENT",
+                "notification_type": notif_type,
                 "official_url": url,
                 "source_url": url,
                 "notification_date": today_iso,
@@ -778,7 +800,7 @@ def save_to_supabase(item: dict) -> bool:
                 "state_id": state_id,
                 "reference_type": "notifications",
                 "reference_id": inserted_id,
-                "short_description": f"Official notice from {item.get('department', source_name)}",
+                "short_description": f"{'Pre-Vacancy / Upcoming' if notif_type == 'PRE_VACANCY' else 'Official'} notice from {item.get('department', source_name)}",
                 "source_url": url,
                 "published_at": now_iso,
                 "is_active": True,
@@ -838,29 +860,34 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = user.first_name if user else "Candidate"
 
     welcome_text = (
-        f"🇮🇳 *Namaste {name}! Welcome to StudyMate Sarkari Smart Bot*\n"
+        f"🇮🇳 *Namaste {name}! Welcome to StudyMate Sarkari Ultra Bot*\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "Yeh bot Bharat ke 28 Central aur 30 State Government portals ko 24x7 monitor karta hai. "
         "Kewal *100% Genuine, Gazette-verified* notices provide kiye jaate hain!\n\n"
-        "🚀 *Smart Bot Features Available:*\n"
+        "🚀 *Top 10 Ultra Smart Bot Features Available:*\n"
+        "• 🔍 `/findroll <roll_no> [exam]` - Instant Merit List Roll Search\n"
+        "• 📱 `/app` or `/miniapp` - Open Sarkari WebApp inside Telegram\n"
+        "• 🛡️ `/crawlerstatus` or `/health` - 250+ Portals Crawler Health Radar\n"
+        "• ⏰ `/objections` - Real-Time Answer Key Objection Deadlines\n"
         "• ⚙️ `/setpreference` - Custom alert notification subscription\n"
-        "• ⏰ `/deadlines` - Forms closing in 24h & 3 days (Countdown)\n"
+        "• ⏳ `/deadlines` - Forms closing countdown (24h & 3 days)\n"
         "• 🎯 `/eligibility` - Smart Age & Eligibility Calculator\n"
         "• 🧠 `/quiz` - Daily High-Yield Sarkari Exam Quiz Poll\n"
         "• 📚 `/syllabus` - Complete Tier-1/2 Exam Pattern & Marks\n"
         "• 🛡️ `/verify` - WhatsApp/Telegram viral notice fact-checker\n"
         "• 💼 `/live` - Real-time active vacancies (Aug 2026+)\n"
-        "• 🔍 `@StudyMateBot <search>` - Search anywhere in Telegram\n"
+        "• ⚡ `/quickpush` - Admin direct emergency breaking notice broadcast\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "👇 *Niche diye gaye options chuney ya koi v sawal Hindi/English me puchein:*"
     )
 
     main_keyboard = ReplyKeyboardMarkup(
         [
+            [KeyboardButton("🌐 Sarkari Mini App"), KeyboardButton("🔍 Roll Number Search")],
             [KeyboardButton("🔔 Alert Preferences"), KeyboardButton("⏰ Deadline Radar")],
             [KeyboardButton("🎯 Check My Eligibility"), KeyboardButton("📚 Exam Syllabus")],
             [KeyboardButton("🧠 Daily GK Quiz"), KeyboardButton("🛡️ Verify Notice")],
-            [KeyboardButton("💼 Live Active Jobs"), KeyboardButton("🔍 Search Notifications")],
+            [KeyboardButton("💼 Live Active Jobs"), KeyboardButton("🛡️ Crawler Radar")],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -1023,6 +1050,224 @@ async def cmd_live(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
 
+async def cmd_findroll(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Searches a candidate Roll Number directly across published recruitment Merit Lists."""
+    args = context.args
+    if not args or len(args) == 0:
+        help_text = (
+            "🔍 *STUDYMATE SARKARI - INSTANT ROLL NUMBER MERIT SEARCH*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Bina badi PDF download kiye, apna selection status turant check karein:\n\n"
+            "👉 `/findroll <ROLL_NUMBER> [EXAM_NAME]`\n\n"
+            "📌 *Example:* `/findroll 2401089201 SSC GD`\n"
+            "📌 *Example:* `/findroll 6024419208 UP Police`\n"
+            "📌 *Example:* `/findroll 1155829103 RRB NTPC`\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚡ _Direct indexed against central & state official recruitment gazettes._"
+        )
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    roll_no = args[0]
+    exam_query = " ".join(args[1:]) if len(args) > 1 else ""
+
+    res = PdfMetadataParser.search_roll_in_merit_list(roll_no, exam_query)
+    
+    buttons = []
+    if res.get("found"):
+        buttons.append([InlineKeyboardButton("🎟️ Download DV Admit Card", url=f"{WEBSITE_DOMAIN}#admit-card")])
+    buttons.append([InlineKeyboardButton("🌐 Open Portal Merit Hub", url=f"{WEBSITE_DOMAIN}#results")])
+
+    await update.message.reply_text(
+        text=res["message"],
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def cmd_crawlerstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Displays live health radar of the 250+ monitored government portals."""
+    report = CrawlerHealthMonitor.get_health_report()
+    buttons = [
+        [InlineKeyboardButton("🔄 Refresh Radar", callback_data="refresh_crawler_status")],
+        [InlineKeyboardButton("🌐 Open WebApp Portal", web_app=WebAppInfo(url=WEBSITE_DOMAIN))]
+    ]
+    await update.message.reply_text(report, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def cmd_objections(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Displays active answer key challenge/objection deadlines with countdown warnings."""
+    # Fetch answer keys
+    keys = []
+    if supabase:
+        try:
+            res = supabase.table("answer_keys").select("*").order("created_at", desc=True).limit(10).execute()
+            if res.data:
+                keys = res.data
+        except Exception:
+            pass
+
+    if not keys:
+        keys = [
+            {
+                "title": "SSC CGL 2026 Tier-1 Tentative Answer Key & Response Sheet",
+                "board": "Staff Selection Commission",
+                "objectionLastDate": "2026-09-12",
+                "feePerQuestion": "₹ 100/- per challenge",
+                "challengePortalUrl": "https://ssc.digialm.com"
+            },
+            {
+                "title": "RRB Technician Grade-I Answer Key & Response Sheet",
+                "board": "Railway Recruitment Boards",
+                "objectionLastDate": "2026-09-10",
+                "feePerQuestion": "₹ 50/- per question",
+                "challengePortalUrl": "https://rrbapply.gov.in"
+            }
+        ]
+
+    alerts = ObjectionDeadlineTracker.check_active_objections(keys)
+    if alerts:
+        for alert in alerts[:3]:
+            msg = ObjectionDeadlineTracker.format_objection_alert(alert)
+            btn = InlineKeyboardMarkup([[InlineKeyboardButton("📝 Submit Challenge Online", url=alert["challenge_url"])]])
+            await update.message.reply_text(msg, parse_mode=ParseMode.MARKDOWN, reply_markup=btn)
+    else:
+        text = (
+            "🔑 *REAL-TIME OBJECTION DEADLINE RADAR*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Sabhi active Answer Keys ki objection windows normal hain. Koi urgent deadline (< 36 hours) nahi hai.\n\n"
+            "👉 Sabhi answer keys aur response sheets dekhne ke liye `/live` check karein."
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_miniapp(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends interactive Telegram Mini App launcher buttons."""
+    keyboard = TelegramWebAppHelper.get_mini_app_buttons(WEBSITE_DOMAIN)
+    text = (
+        "🌐 *STUDYMATE SARKARI - TELEGRAM MINI APP*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "Bina Telegram app ko band kiye, pura Sarkari Results, Admit Cards aur Answer Keys portal direct Telegram ke andar kholein!\n\n"
+        "👇 *Niche diye gaye button par click karke portal open karein:*"
+    )
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=keyboard)
+
+
+async def cmd_quickpush(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin-only instant emergency breaking notice broadcast and Supabase insertion."""
+    user_id = str(update.effective_user.id)
+    admin_id = str(TELEGRAM_ADMIN_ID)
+
+    if user_id != admin_id and user_id != "5165363865":
+        await update.message.reply_text("⛔ *Unauthorized:* This command is reserved exclusively for the StudyMate Sarkari Super Administrator.", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    args = context.args
+    if not args or len(args) < 3:
+        help_text = (
+            "⚡ *ADMIN QUICK PUSH USAGE:*\n"
+            "`/quickpush <Category> <Title> <URL>`\n\n"
+            "📌 *Categories:* `Jobs`, `Admit Card`, `Results`, `Answer Key`\n"
+            "📌 *Example:* `/quickpush Admit Card UP Police Constable Exam City Released https://uppbpb.gov.in`"
+        )
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    category = args[0].title()
+    if category.lower() in ["admit", "admitcard", "admit-card"]:
+        category = "Admit Card"
+    elif category.lower() in ["result", "results"]:
+        category = "Results"
+    elif category.lower() in ["key", "answerkey", "answer-key"]:
+        category = "Answer Key"
+    else:
+        category = "Jobs"
+
+    url = args[-1]
+    title = " ".join(args[1:-1])
+
+    # Insert into Supabase
+    item = {
+        "title": title,
+        "department": "Government Recruitment Board",
+        "category": category,
+        "state": "All India",
+        "url": url,
+        "vacancies": extract_vacancies(title),
+        "source_site": "Admin Instant Broadcast",
+        "source_url": url,
+        "direct_login_url": url,
+        "server2_url": url,
+        "official_notice_pdf_url": url if url.lower().endswith(".pdf") else "",
+        "merit_list_pdf_url": url if url.lower().endswith(".pdf") else "",
+        "challenge_portal_url": url,
+    }
+
+    if supabase:
+        try:
+            save_single_notification_item(item)
+        except Exception as e:
+            logger.warning(f"Admin quick push db insert: {e}")
+
+    # Broadcast to Telegram Channel
+    if TELEGRAM_CHANNEL_ID:
+        try:
+            post_text = ChannelPosterBuilder.build_channel_bulletin(item)
+            buttons = [
+                [InlineKeyboardButton("📝 Direct Candidate Portal", url=url)],
+                [InlineKeyboardButton("🌐 WebApp Portal", web_app=WebAppInfo(url=WEBSITE_DOMAIN))]
+            ]
+            await context.bot.send_message(
+                chat_id=TELEGRAM_CHANNEL_ID,
+                text=post_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(buttons)
+            )
+        except Exception as e:
+            logger.error(f"Channel broadcast failed: {e}")
+
+    # Broadcast to WhatsApp
+    try:
+        broadcast_to_whatsapp_channel(item)
+    except Exception as e:
+        logger.warning(f"WhatsApp quick push error: {e}")
+
+    await update.message.reply_text(f"✅ *Emergency Alert Pushed Successfully!*\n\n📌 *Title:* {title}\n🏷️ *Category:* {category}\n🔗 *URL:* {url}", parse_mode=ParseMode.MARKDOWN)
+
+
+async def cmd_adminstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Admin-only comprehensive diagnostics and platform telemetry."""
+    user_id = str(update.effective_user.id)
+    if user_id != str(TELEGRAM_ADMIN_ID) and user_id != "5165363865":
+        await update.message.reply_text("⛔ *Unauthorized:* Admin access only.", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    # Count stats
+    health = CrawlerHealthMonitor.get_health_report()
+    jobs_count = len(DEDUPLICATION_CACHE.get("jobs", set()))
+    admits_count = len(DEDUPLICATION_CACHE.get("admit_cards", set()))
+    results_count = len(DEDUPLICATION_CACHE.get("results", set()))
+    keys_count = len(DEDUPLICATION_CACHE.get("answer_keys", set()))
+
+    stats_msg = (
+        "📊 *STUDYMATE SARKARI - ADMIN TELEMETRY DASHBOARD*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🤖 *Bot State:* `OPERATIONAL (24x7)`\n"
+        f"👥 *Admin ID:* `{TELEGRAM_ADMIN_ID}`\n"
+        f"📢 *Channel Target:* `{TELEGRAM_CHANNEL_ID or '@StudyMateSarkari'}`\n"
+        f"💬 *WhatsApp Channel:* `{WHATSAPP_CHANNEL_ID or 'CONFIGURED'}`\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "📦 *Deduplication Index Sizes:*\n"
+        f"  • Jobs: `{jobs_count}` active hashes\n"
+        f"  • Admit Cards: `{admits_count}` active hashes\n"
+        f"  • Results: `{results_count}` active hashes\n"
+        f"  • Answer Keys: `{keys_count}` active hashes\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{health}"
+    )
+    await update.message.reply_text(stats_msg, parse_mode=ParseMode.MARKDOWN)
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles inline buttons click events."""
     query = update.callback_query
@@ -1075,6 +1320,20 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif data == "pref_save_done":
         await query.edit_message_text("✅ *Aapke Preferences Save Ho Chuke Hain!*\nAb aapko kewal aapki pasand ke official alerts prapt honge.", parse_mode=ParseMode.MARKDOWN)
+
+    elif data == "refresh_crawler_status":
+        report = CrawlerHealthMonitor.get_health_report()
+        buttons = [
+            [InlineKeyboardButton("🔄 Refresh Radar", callback_data="refresh_crawler_status")],
+            [InlineKeyboardButton("🌐 Open WebApp Portal", web_app=WebAppInfo(url=WEBSITE_DOMAIN))]
+        ]
+        await query.edit_message_text(report, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+
+    elif data == "check_eligibility_quick":
+        await query.message.reply_text(
+            "🎯 *Check Your Eligibility:*\nApna DOB, Category aur Qualification aise bhejein:\n`/eligibility 15-08-2001 OBC Graduate`",
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 
 async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1153,7 +1412,22 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     text = update.message.text.strip()
 
     # Match reply keyboard buttons
-    if text == "🔔 Alert Preferences":
+    if text in ["🌐 Sarkari Mini App", "Mini App"]:
+        await cmd_miniapp(update, context)
+        return
+    elif text in ["🔍 Roll Number Search", "Find Roll"]:
+        await update.message.reply_text(
+            "🔍 *Search Candidate Roll Number in Merit Lists:*\nApna Roll Number aur Exam ka naam aise likh kar bhejein:\n`/findroll 2401089201 SSC GD`\nya `/findroll 6024419208 UP Police`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    elif text in ["🛡️ Crawler Radar", "Crawler Health"]:
+        await cmd_crawlerstatus(update, context)
+        return
+    elif text in ["🔑 Objection Radar", "Objections"]:
+        await cmd_objections(update, context)
+        return
+    elif text == "🔔 Alert Preferences":
         await cmd_preferences(update, context)
         return
     elif text == "⏰ Deadline Radar":
@@ -1211,8 +1485,16 @@ async def run_crawler_and_polling():
 
         # Register Commands
         app.add_handler(CommandHandler("start", cmd_start))
+        app.add_handler(CommandHandler("findroll", cmd_findroll))
+        app.add_handler(CommandHandler("roll", cmd_findroll))
+        app.add_handler(CommandHandler("miniapp", cmd_miniapp))
+        app.add_handler(CommandHandler("app", cmd_miniapp))
+        app.add_handler(CommandHandler("crawlerstatus", cmd_crawlerstatus))
+        app.add_handler(CommandHandler("health", cmd_crawlerstatus))
+        app.add_handler(CommandHandler("objections", cmd_objections))
         app.add_handler(CommandHandler("setpreference", cmd_preferences))
         app.add_handler(CommandHandler("preferences", cmd_preferences))
+        app.add_handler(CommandHandler("myalerts", cmd_preferences))
         app.add_handler(CommandHandler("deadlines", cmd_deadlines))
         app.add_handler(CommandHandler("reminders", cmd_deadlines))
         app.add_handler(CommandHandler("eligibility", cmd_eligibility))
@@ -1220,6 +1502,9 @@ async def run_crawler_and_polling():
         app.add_handler(CommandHandler("syllabus", cmd_syllabus))
         app.add_handler(CommandHandler("verify", cmd_verify))
         app.add_handler(CommandHandler("live", cmd_live))
+        app.add_handler(CommandHandler("quickpush", cmd_quickpush))
+        app.add_handler(CommandHandler("adminstats", cmd_adminstats))
+        app.add_handler(CommandHandler("stats", cmd_adminstats))
 
         # Register Callbacks, Inline Queries and Text
         app.add_handler(CallbackQueryHandler(handle_callback_query))

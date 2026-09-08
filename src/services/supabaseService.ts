@@ -4,6 +4,7 @@ import {
   AdmitCardItem,
   ResultItem,
   AnswerKeyItem,
+  PreVacancyNoticeItem,
   GovernmentSource,
   TelegramBotLog,
 } from '../types';
@@ -12,6 +13,7 @@ import {
   INITIAL_ADMIT_CARDS,
   INITIAL_RESULTS,
   INITIAL_ANSWER_KEYS,
+  INITIAL_NOTIFICATIONS,
   OFFICIAL_GOVERNMENT_SOURCES,
   INITIAL_BOT_LOGS,
 } from '../data/mockData';
@@ -292,6 +294,8 @@ class SupabaseService {
   // 2. ADMIT CARDS -> Queries public.admit_cards table
   // ============================================================
   public async getAdmitCards(): Promise<AdmitCardItem[]> {
+    let dynamicCards: AdmitCardItem[] = [];
+
     if (this.client && this.config.isConnected) {
       try {
         const { data, error } = await this.client
@@ -299,39 +303,102 @@ class SupabaseService {
           .select('*')
           .eq('is_active', true)
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (!error && data && data.length > 0) {
-          const dynamicCards: AdmitCardItem[] = data.map((row: any) => ({
-            id: `db-admit-${row.id}`,
-            title: row.title,
-            examName: row.exam_name || row.title,
-            commission: 'Govt Board / Commission',
-            commissionCode: 'ssc',
-            category: 'civil',
-            month: 'Live Now',
-            examDateFormatted: row.exam_date ? new Date(row.exam_date).toLocaleDateString('en-IN') : 'Check Call Letter',
-            statusBadge: 'Hall Ticket Out',
-            statusType: 'active',
-            totalCenters: 'All India Test Centers',
-            citySlipUrl: row.download_url || row.source_url || '#',
-            hallTicketUrl: row.download_url || row.source_url || '#',
-            requirements: 'Registration Number, Password / DOB & Govt Photo ID',
-            updatedTime: 'Live from Supabase',
-          }));
-          return dynamicCards;
+          dynamicCards = data.map((row: any) => {
+            const titleLower = (row.title || '').toLowerCase();
+            let commission = 'Govt Commission';
+            let commissionCode: 'upsc' | 'ssc' | 'railways' | 'banking' | 'state-psc' | 'nta' = 'ssc';
+            let category: 'civil' | 'police' | 'tech' | 'teaching' | 'clerical' = 'civil';
+
+            if (titleLower.includes('upsc') || titleLower.includes('civil service') || titleLower.includes('nda') || titleLower.includes('cds') || titleLower.includes('ias')) {
+              commission = 'Union Public Service Commission (UPSC)';
+              commissionCode = 'upsc';
+              category = 'civil';
+            } else if (titleLower.includes('rrb') || titleLower.includes('railway') || titleLower.includes('alp') || titleLower.includes('ntpc') || titleLower.includes('group d')) {
+              commission = 'Railway Recruitment Boards (RRB)';
+              commissionCode = 'railways';
+              category = 'tech';
+            } else if (titleLower.includes('ibps') || titleLower.includes('sbi') || titleLower.includes('rbi') || titleLower.includes('bank')) {
+              commission = 'Banking Exam Board (IBPS/SBI)';
+              commissionCode = 'banking';
+              category = 'clerical';
+            } else if (titleLower.includes('nta') || titleLower.includes('neet') || titleLower.includes('jee') || titleLower.includes('ctet') || titleLower.includes('ugc') || titleLower.includes('tet') || titleLower.includes('dsssb')) {
+              commission = 'NTA / Teaching Commission';
+              commissionCode = 'nta';
+              category = 'teaching';
+            } else if (titleLower.includes('psc') || titleLower.includes('police') || titleLower.includes('bpsc') || titleLower.includes('uppsc') || titleLower.includes('mppsc') || titleLower.includes('rpsc') || titleLower.includes('csbc') || titleLower.includes('constable')) {
+              commission = 'State PSC & Police Recruitment Board';
+              commissionCode = 'state-psc';
+              category = 'police';
+            } else {
+              commission = 'Staff Selection Commission (SSC)';
+              commissionCode = 'ssc';
+              category = 'clerical';
+            }
+
+            const monthStr = row.exam_date
+              ? new Date(row.exam_date).toLocaleString('default', { month: 'long' }).toLowerCase()
+              : 'august';
+
+            return {
+              id: `db-admit-${row.id}`,
+              title: row.title,
+              examName: row.exam_name || row.title,
+              commission,
+              commissionCode,
+              category,
+              month: `${monthStr}-2026`,
+              examDateFormatted: row.exam_date ? new Date(row.exam_date).toLocaleDateString('en-IN') : 'Check Call Letter',
+              statusBadge: 'Hall Ticket Out',
+              statusType: 'active' as const,
+              totalCenters: 'All India Test Centers',
+              citySlipUrl: row.download_url || row.source_url || '#',
+              hallTicketUrl: row.download_url || row.source_url || '#',
+              directLoginUrl: row.direct_login_url || row.download_url || row.source_url || '#',
+              server2Url: row.server2_url || row.source_url || row.download_url || '#',
+              officialNoticePdfUrl: row.official_notice_pdf_url || (row.download_url?.toLowerCase().endsWith('.pdf') ? row.download_url : ''),
+              serverStatus: 'fast' as const,
+              requirements: 'Registration Number, Password / DOB & Govt Photo ID',
+              updatedTime: 'Live from Supabase',
+            };
+          });
         }
       } catch (e) {
         console.warn('Error fetching admit cards from Supabase:', e);
       }
     }
-    return INITIAL_ADMIT_CARDS;
+
+    // Merge dynamic Supabase cards with baseline cards, avoiding duplicate titles
+    const seenTitles = new Set<string>();
+    const combined: AdmitCardItem[] = [];
+
+    for (const card of dynamicCards) {
+      const clean = card.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(card);
+      }
+    }
+
+    for (const baseCard of INITIAL_ADMIT_CARDS) {
+      const clean = baseCard.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(baseCard);
+      }
+    }
+
+    return combined;
   }
 
   // ============================================================
   // 3. RESULTS -> Queries public.results table
   // ============================================================
   public async getResults(): Promise<ResultItem[]> {
+    let dynamicResults: ResultItem[] = [];
+
     if (this.client && this.config.isConnected) {
       try {
         const { data, error } = await this.client
@@ -339,35 +406,91 @@ class SupabaseService {
           .select('*')
           .eq('is_active', true)
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (!error && data && data.length > 0) {
-          const dynamicResults: ResultItem[] = data.map((row: any) => ({
-            id: `db-result-${row.id}`,
-            title: row.title,
-            board: 'Govt Recruitment Commission',
-            category: 'SSC' as const,
-            declaredDate: row.result_date ? new Date(row.result_date).toLocaleDateString('en-IN') : 'Declared Today',
-            examDate: row.exam_date ? new Date(row.exam_date).toLocaleDateString('en-IN') : 'Recent Exam',
-            totalPosts: 'Multiple Vacancies',
-            resultType: 'Final Result' as const,
-            downloadUrl: row.result_url || row.source_url || '#',
-            cutOffUrl: row.result_url || row.source_url || '#',
-            isNew: true,
-          }));
-          return dynamicResults;
+          dynamicResults = data.map((row: any) => {
+            const titleLower = (row.title || '').toLowerCase();
+            let board = 'Govt Recruitment Commission';
+            let category: 'SSC' | 'Railway' | 'Banking' | 'UPSC' | 'Defence' | 'Teaching' | 'Police' | 'State PSC' = 'SSC';
+
+            if (titleLower.includes('upsc') || titleLower.includes('civil service') || titleLower.includes('ias')) {
+              board = 'Union Public Service Commission (UPSC)';
+              category = 'UPSC';
+            } else if (titleLower.includes('rrb') || titleLower.includes('railway') || titleLower.includes('alp') || titleLower.includes('ntpc')) {
+              board = 'Railway Recruitment Boards (RRB)';
+              category = 'Railway';
+            } else if (titleLower.includes('ibps') || titleLower.includes('sbi') || titleLower.includes('rbi') || titleLower.includes('bank')) {
+              board = 'Banking Recruitment Board (IBPS/SBI)';
+              category = 'Banking';
+            } else if (titleLower.includes('police') || titleLower.includes('constable') || titleLower.includes('si') || titleLower.includes('daroga')) {
+              board = 'State Police Recruitment Board';
+              category = 'Police';
+            } else if (titleLower.includes('nda') || titleLower.includes('cds') || titleLower.includes('army') || titleLower.includes('navy') || titleLower.includes('air force') || titleLower.includes('agniveer')) {
+              board = 'Ministry of Defence / UPSC';
+              category = 'Defence';
+            } else if (titleLower.includes('ctet') || titleLower.includes('ugc') || titleLower.includes('tet') || titleLower.includes('dsssb') || titleLower.includes('teacher')) {
+              board = 'National Testing Agency / CBSE';
+              category = 'Teaching';
+            } else if (titleLower.includes('psc') || titleLower.includes('bpsc') || titleLower.includes('uppsc') || titleLower.includes('mppsc') || titleLower.includes('rpsc') || titleLower.includes('upsssc')) {
+              board = 'State Public Service Commission';
+              category = 'State PSC';
+            } else {
+              board = 'Staff Selection Commission (SSC)';
+              category = 'SSC';
+            }
+
+            return {
+              id: `db-result-${row.id}`,
+              title: row.title,
+              board,
+              category,
+              declaredDate: row.result_date ? new Date(row.result_date).toLocaleDateString('en-IN') : 'Declared Today',
+              examDate: row.exam_date ? new Date(row.exam_date).toLocaleDateString('en-IN') : 'Recent Examination',
+              totalPosts: 'Multiple Vacancies',
+              resultType: (titleLower.includes('cut') || titleLower.includes('score')) ? 'Score Card' as const : (titleLower.includes('merit') ? 'Merit List' as const : 'Final Result' as const),
+              downloadUrl: row.result_url || row.source_url || '#',
+              scorecardLoginUrl: row.scorecard_login_url || row.result_url || row.source_url || '#',
+              server2Url: row.server2_url || row.source_url || row.result_url || '#',
+              meritListPdfUrl: row.merit_list_pdf_url || (row.result_url?.toLowerCase().endsWith('.pdf') ? row.result_url : row.result_url),
+              cutOffUrl: row.result_url || row.source_url || '#',
+              isNew: true,
+            };
+          });
         }
       } catch (e) {
         console.warn('Error fetching results from Supabase:', e);
       }
     }
-    return INITIAL_RESULTS;
+
+    const seenTitles = new Set<string>();
+    const combined: ResultItem[] = [];
+
+    for (const res of dynamicResults) {
+      const clean = res.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(res);
+      }
+    }
+
+    for (const baseRes of INITIAL_RESULTS) {
+      const clean = baseRes.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(baseRes);
+      }
+    }
+
+    return combined;
   }
 
   // ============================================================
   // 4. ANSWER KEYS -> Queries public.answer_keys table
   // ============================================================
   public async getAnswerKeys(): Promise<AnswerKeyItem[]> {
+    let dynamicKeys: AnswerKeyItem[] = [];
+
     if (this.client && this.config.isConnected) {
       try {
         const { data, error } = await this.client
@@ -375,29 +498,173 @@ class SupabaseService {
           .select('*')
           .eq('is_active', true)
           .order('created_at', { ascending: false })
-          .limit(50);
+          .limit(100);
 
         if (!error && data && data.length > 0) {
-          const dynamicKeys: AnswerKeyItem[] = data.map((row: any) => ({
-            id: `db-key-${row.id}`,
-            title: row.title,
-            board: 'Govt Examination Authority',
-            category: 'SSC' as const,
-            releaseDate: row.release_date ? new Date(row.release_date).toLocaleDateString('en-IN') : 'Released Today',
-            objectionLastDate: row.objection_last_date ? new Date(row.objection_last_date).toLocaleDateString('en-IN') : 'Check Notice',
-            feePerQuestion: '₹ 100/- per challenge',
-            status: 'Provisional Key' as const,
-            answerKeyUrl: row.answer_key_url || row.source_url || '#',
-            challengePortalUrl: row.answer_key_url || row.source_url || '#',
-            totalQuestions: 100,
-          }));
-          return dynamicKeys;
+          dynamicKeys = data.map((row: any) => {
+            const titleLower = (row.title || '').toLowerCase();
+            let board = 'Govt Examination Authority';
+            let category: 'SSC' | 'Railway' | 'Banking' | 'UPSC' | 'Defence' | 'Teaching' | 'Police' | 'State PSC' = 'SSC';
+
+            if (titleLower.includes('upsc') || titleLower.includes('civil service') || titleLower.includes('nda')) {
+              board = 'Union Public Service Commission (UPSC)';
+              category = 'UPSC';
+            } else if (titleLower.includes('rrb') || titleLower.includes('railway') || titleLower.includes('alp') || titleLower.includes('ntpc')) {
+              board = 'Railway Recruitment Boards (RRB)';
+              category = 'Railway';
+            } else if (titleLower.includes('ibps') || titleLower.includes('sbi') || titleLower.includes('bank')) {
+              board = 'Banking Examination Board';
+              category = 'Banking';
+            } else if (titleLower.includes('police') || titleLower.includes('constable') || titleLower.includes('si')) {
+              board = 'State Police Recruitment Board';
+              category = 'Police';
+            } else if (titleLower.includes('ctet') || titleLower.includes('ugc') || titleLower.includes('tet') || titleLower.includes('dsssb') || titleLower.includes('teacher')) {
+              board = 'National Testing Agency / CBSE';
+              category = 'Teaching';
+            } else if (titleLower.includes('psc') || titleLower.includes('bpsc') || titleLower.includes('uppsc') || titleLower.includes('mppsc') || titleLower.includes('rpsc') || titleLower.includes('upsssc')) {
+              board = 'State Public Service Commission';
+              category = 'State PSC';
+            } else {
+              board = 'Staff Selection Commission (SSC)';
+              category = 'SSC';
+            }
+
+            const isFinal = titleLower.includes('final') || titleLower.includes('revised');
+
+            return {
+              id: `db-key-${row.id}`,
+              title: row.title,
+              board,
+              category,
+              releaseDate: row.release_date ? new Date(row.release_date).toLocaleDateString('en-IN') : 'Released Today',
+              objectionLastDate: row.objection_last_date ? new Date(row.objection_last_date).toLocaleDateString('en-IN') : (isFinal ? 'Closed' : 'Within 7 Days'),
+              feePerQuestion: isFinal ? 'N/A (Final Key)' : '₹ 100/- per challenge',
+              status: isFinal ? ('Final Answer Key' as const) : ('Objection Window Open' as const),
+              answerKeyUrl: row.answer_key_url || row.source_url || '#',
+              challengePortalUrl: row.challenge_portal_url || row.answer_key_url || row.source_url || '#',
+              directLoginUrl: row.direct_login_url || row.answer_key_url || row.source_url || '#',
+              server2Url: row.server2_url || row.source_url || row.answer_key_url || '#',
+              officialNoticePdfUrl: row.official_notice_pdf_url || (row.answer_key_url?.toLowerCase().endsWith('.pdf') ? row.answer_key_url : ''),
+              totalQuestions: 100,
+            };
+          });
         }
       } catch (e) {
         console.warn('Error fetching answer keys from Supabase:', e);
       }
     }
-    return INITIAL_ANSWER_KEYS;
+
+    const seenTitles = new Set<string>();
+    const combined: AnswerKeyItem[] = [];
+
+    for (const key of dynamicKeys) {
+      const clean = key.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(key);
+      }
+    }
+
+    for (const baseKey of INITIAL_ANSWER_KEYS) {
+      const clean = baseKey.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(baseKey);
+      }
+    }
+
+    return combined;
+  }
+
+  // ============================================================
+  // 5. PRE-VACANCY & NOTIFICATIONS -> Queries public.notifications table
+  // ============================================================
+  public async getNotifications(): Promise<PreVacancyNoticeItem[]> {
+    let dynamicNotifs: PreVacancyNoticeItem[] = [];
+
+    if (this.client && this.config.isConnected) {
+      try {
+        const { data, error } = await this.client
+          .from('notifications')
+          .select('*')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(100);
+
+        if (!error && data && data.length > 0) {
+          dynamicNotifs = data.map((row: any) => {
+            const titleLower = (row.title || '').toLowerCase();
+            let category: 'SSC' | 'Railway' | 'Banking' | 'UPSC' | 'Defence' | 'Teaching' | 'Police' | 'State PSC' = 'SSC';
+
+            if (titleLower.includes('upsc') || titleLower.includes('civil service') || titleLower.includes('ias')) {
+              category = 'UPSC';
+            } else if (titleLower.includes('rrb') || titleLower.includes('railway') || titleLower.includes('alp') || titleLower.includes('ntpc') || titleLower.includes('group d')) {
+              category = 'Railway';
+            } else if (titleLower.includes('ibps') || titleLower.includes('sbi') || titleLower.includes('bank')) {
+              category = 'Banking';
+            } else if (titleLower.includes('police') || titleLower.includes('constable') || titleLower.includes('si')) {
+              category = 'Police';
+            } else if (titleLower.includes('army') || titleLower.includes('navy') || titleLower.includes('air force') || titleLower.includes('agniveer') || titleLower.includes('defence')) {
+              category = 'Defence';
+            } else if (titleLower.includes('ctet') || titleLower.includes('ugc') || titleLower.includes('tet') || titleLower.includes('dsssb') || titleLower.includes('teacher')) {
+              category = 'Teaching';
+            } else if (titleLower.includes('psc') || titleLower.includes('bpsc') || titleLower.includes('uppsc') || titleLower.includes('mppsc') || titleLower.includes('rpsc')) {
+              category = 'State PSC';
+            } else {
+              category = 'SSC';
+            }
+
+            let noticeType: 'Short Notice' | 'Upcoming Vacancy' | 'Exam Calendar' | 'Rozgar Samachar' | 'Corrigendum' = 'Short Notice';
+            if (row.notification_type === 'PRE_VACANCY' || titleLower.includes('upcoming') || titleLower.includes('advance')) {
+              noticeType = 'Upcoming Vacancy';
+            } else if (titleLower.includes('calendar') || titleLower.includes('schedule')) {
+              noticeType = 'Exam Calendar';
+            } else if (titleLower.includes('rozgar') || titleLower.includes('employment news')) {
+              noticeType = 'Rozgar Samachar';
+            } else if (titleLower.includes('corrigendum') || titleLower.includes('amendment')) {
+              noticeType = 'Corrigendum';
+            }
+
+            return {
+              id: `db-notif-${row.id}`,
+              title: row.title,
+              department: 'Govt Department / Board',
+              category,
+              noticeType,
+              expectedDate: 'Official Notice Active',
+              expectedVacancies: 'As per Circular',
+              officialPdfUrl: row.official_url || row.source_url || '#',
+              sourceUrl: row.source_url || row.official_url || '#',
+              releaseDate: row.notification_date ? new Date(row.notification_date).toLocaleDateString('en-IN') : 'Recent',
+              isNew: true,
+            };
+          });
+        }
+      } catch (e) {
+        console.warn('Error fetching notifications from Supabase:', e);
+      }
+    }
+
+    const seenTitles = new Set<string>();
+    const combined: PreVacancyNoticeItem[] = [];
+
+    for (const notif of dynamicNotifs) {
+      const clean = notif.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(notif);
+      }
+    }
+
+    for (const baseNotif of INITIAL_NOTIFICATIONS) {
+      const clean = baseNotif.title.toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      if (!seenTitles.has(clean)) {
+        seenTitles.add(clean);
+        combined.push(baseNotif);
+      }
+    }
+
+    return combined;
   }
 
   // ============================================================

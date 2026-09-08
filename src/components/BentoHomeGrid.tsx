@@ -139,7 +139,7 @@ export const BentoHomeGrid: React.FC<BentoHomeGridProps> = ({
             </div>
 
             <div className="divide-y divide-[#eff4ff] dark:divide-[#1e324c] pt-1">
-              {admitCards.slice(0, 3).map((item) => (
+              {admitCards.slice(0, 4).map((item) => (
                 <div
                   key={item.id}
                   onClick={() => onNavigate('admit-card')}
@@ -147,10 +147,10 @@ export const BentoHomeGrid: React.FC<BentoHomeGridProps> = ({
                 >
                   <div className="flex items-center justify-between gap-1 mb-0.5">
                     <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-[#ffdad6] text-[#93000a] dark:bg-rose-950 dark:text-rose-300 uppercase">
-                      Admit Card Out
+                      {item.statusBadge || 'Admit Card Out'}
                     </span>
                     <span className="text-[10px] text-[#757682] dark:text-[#94a3b8] font-bold">
-                      {item.examDate || 'Check Hall Ticket'}
+                      {item.examDateFormatted || item.examDate || 'Check Hall Ticket'}
                     </span>
                   </div>
                   <h4 className="text-xs font-bold text-[#0b1c30] dark:text-white group-hover:text-[#00236f] dark:group-hover:text-[#38bdf8] truncate">
@@ -159,7 +159,7 @@ export const BentoHomeGrid: React.FC<BentoHomeGridProps> = ({
                 </div>
               ))}
 
-              {results.slice(0, 2).map((res) => (
+              {results.slice(0, 3).map((res) => (
                 <div
                   key={res.id}
                   onClick={() => onNavigate('results')}
@@ -167,10 +167,10 @@ export const BentoHomeGrid: React.FC<BentoHomeGridProps> = ({
                 >
                   <div className="flex items-center justify-between gap-1 mb-0.5">
                     <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-[#85f8c4] text-[#002114] uppercase">
-                      Merit List Declared
+                      {res.resultType || 'Merit List'}
                     </span>
                     <span className="text-[10px] text-[#757682] dark:text-[#94a3b8] font-bold">
-                      Scorecard Active
+                      {res.declaredDate || 'Scorecard Active'}
                     </span>
                   </div>
                   <h4 className="text-xs font-bold text-[#0b1c30] dark:text-white group-hover:text-emerald-600 truncate">

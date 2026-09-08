@@ -27,8 +27,9 @@ import {
   MOCK_ANSWER_KEYS,
   MOCK_SOURCES,
   MOCK_BOT_LOGS,
+  INITIAL_NOTIFICATIONS,
 } from './data/mockData';
-import { JobItem, GovernmentSource, TelegramBotLog } from './types';
+import { JobItem, GovernmentSource, TelegramBotLog, PreVacancyNoticeItem } from './types';
 import { supabaseService } from './services/supabaseService';
 import { whatsAppService } from './services/whatsappService';
 import { telegramService } from './services/telegramService';
@@ -100,6 +101,7 @@ export function App() {
   const [admitCards, setAdmitCards] = useState(MOCK_ADMIT_CARDS);
   const [results, setResults] = useState(MOCK_RESULTS);
   const [answerKeys, setAnswerKeys] = useState(MOCK_ANSWER_KEYS);
+  const [notifications, setNotifications] = useState<PreVacancyNoticeItem[]>(INITIAL_NOTIFICATIONS);
   const [sources, setSources] = useState<GovernmentSource[]>(MOCK_SOURCES);
   const [botLogs, setBotLogs] = useState<TelegramBotLog[]>(MOCK_BOT_LOGS);
 
@@ -158,7 +160,7 @@ export function App() {
   useEffect(() => {
     const loadSupabaseData = async () => {
       try {
-        const [liveJobs, liveAdmitCards, liveResults, liveKeys, liveSources, liveLogs] =
+        const [liveJobs, liveAdmitCards, liveResults, liveKeys, liveSources, liveLogs, liveNotifs] =
           await Promise.all([
             supabaseService.getJobs(),
             supabaseService.getAdmitCards(),
@@ -166,6 +168,7 @@ export function App() {
             supabaseService.getAnswerKeys(),
             supabaseService.getSourcesAsync(),
             supabaseService.getBotLogsAsync(),
+            supabaseService.getNotifications(),
           ]);
 
         if (liveJobs && liveJobs.length > 0) {
@@ -188,6 +191,9 @@ export function App() {
           setAnswerKeys(liveKeys);
           whatsAppService.autoBroadcastNewItems(liveKeys, 'ANSWER_KEY');
           telegramService.autoBroadcastNewItems(liveKeys, 'ANSWER_KEY');
+        }
+        if (liveNotifs && liveNotifs.length > 0) {
+          setNotifications(liveNotifs);
         }
         if (liveSources && liveSources.length > 0) setSources(liveSources);
         if (liveLogs && liveLogs.length > 0) setBotLogs(liveLogs);
@@ -381,7 +387,7 @@ export function App() {
         )}
 
         {activeTab === 'exam-calendar' && (
-          <ExamCalendarView onNavigate={handleNavigate} />
+          <ExamCalendarView onNavigate={handleNavigate} notifications={notifications} />
         )}
 
         {activeTab === 'candidate-tools' && (

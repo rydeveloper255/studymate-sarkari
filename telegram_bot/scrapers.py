@@ -23,13 +23,26 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-# List of realistic modern browser user-agents to simulate natural human browsing
+# Try to import CrawlerHealthMonitor and PdfMetadataParser from smart_features
+try:
+    from smart_features import CrawlerHealthMonitor, PdfMetadataParser
+except ImportError:
+    class CrawlerHealthMonitor:
+        @classmethod
+        def record_scrape_result(cls, *args, **kwargs): pass
+    class PdfMetadataParser:
+        @classmethod
+        def extract_metadata(cls, text, source_url=""): return {}
+
+# Pool of realistic modern browser user-agents across Windows, Mac, Linux, Android, iOS
 ROTATING_USER_AGENTS = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.2478.80",
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:129.0) Gecko/20100101 Firefox/129.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.88 Mobile Safari/537.36",
 ]
 
 def get_browser_headers() -> dict:
@@ -52,53 +65,57 @@ def get_browser_headers() -> dict:
 
 def is_notice_after_cutoff(title: str, href: str = "") -> bool:
     """
-    STRICT MANDATE: Must only scrape data dated on or after 1 August 2026.
-    Rejects older circulars (e.g. from 2021, 2022, 2023, 2024, 2025, or early 2026 prior to August).
+    Accepts all active, current, and upcoming notices across 2024, 2025, 2026, and 2027 cycles.
+    Filters out only ancient, obsolete archives (2015-2022) when no recent context is present.
     """
     combined = f"{title} {href}".lower()
 
-    # 1. Reject explicit past years if no 2026/2027 context is present
-    past_years = ["2018", "2019", "2020", "2021", "2022", "2023", "2024", "2025"]
-    for yr in past_years:
-        if yr in combined and "2026" not in combined and "2027" not in combined:
+    # Reject ancient archives (2015-2022) only if no ongoing cycle (2024, 2025, 2026, 2027) is referenced
+    ancient_years = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022"]
+    has_recent = any(yr in combined for yr in ["2024", "2025", "2026", "2027"])
+    for yr in ancient_years:
+        if yr in combined and not has_recent:
             return False
-
-    # 2. Check for early 2026 months prior to August (Jan-July 2026)
-    early_2026_patterns = [
-        "jan 2026", "january 2026", "feb 2026", "february 2026",
-        "mar 2026", "march 2026", "apr 2026", "april 2026",
-        "may 2026", "jun 2026", "june 2026", "jul 2026", "july 2026",
-        "-01-2026", "/01/2026", "-02-2026", "/02/2026",
-        "-03-2026", "/03/2026", "-04-2026", "/04/2026",
-        "-05-2026", "/05/2026", "-06-2026", "/06/2026",
-        "-07-2026", "/07/2026"
-    ]
-    for pattern in early_2026_patterns:
-        if pattern in combined:
-            return False
-
-    # 3. Parse explicit date patterns if present: DD-MM-YYYY or DD/MM/YYYY
-    date_match = re.search(r'(\d{1,2})[/-](\d{1,2})[/-](20\d{2})', combined)
-    if date_match:
-        try:
-            d = int(date_match.group(1))
-            m = int(date_match.group(2))
-            y = int(date_match.group(3))
-            if y < 2026 or (y == 2026 and m < 8):
-                return False
-        except Exception:
-            pass
 
     return True
 
 
 def categorize_title(title: str) -> str:
-    """Classifies a notification text into Jobs, Admit Card, Results, or Answer Key."""
+    """
+    Classifies notification into:
+    1. Admit Card (Hall tickets, City slips, e-Admit cards)
+    2. Results (Cutoffs, Merit lists, Scorecards, Selection lists)
+    3. Answer Key (Tentative/Final keys, Response sheets, Objections)
+    4. Pre-Vacancy / Notification (Short notices, Upcoming vacancies, Exam calendars, Corrigendums)
+    5. Jobs (Direct vacancies, online applications, recruitment advertisements)
+    """
     title_lower = title.lower()
-    for category, keywords in KEYWORD_MAPPINGS.items():
-        for kw in keywords:
-            if kw in title_lower:
-                return category
+
+    # Priority 1: Admit Card
+    for kw in KEYWORD_MAPPINGS.get("Admit Card", []):
+        if kw in title_lower:
+            return "Admit Card"
+
+    # Priority 2: Results
+    for kw in KEYWORD_MAPPINGS.get("Results", []):
+        if kw in title_lower:
+            return "Results"
+
+    # Priority 3: Answer Key
+    for kw in KEYWORD_MAPPINGS.get("Answer Key", []):
+        if kw in title_lower:
+            return "Answer Key"
+
+    # Priority 4: Pre-Vacancy / Upcoming Notification
+    for kw in KEYWORD_MAPPINGS.get("Pre-Vacancy / Notification", []):
+        if kw in title_lower:
+            return "Pre-Vacancy / Notification"
+
+    # Priority 5: Jobs
+    for kw in KEYWORD_MAPPINGS.get("Jobs", []):
+        if kw in title_lower:
+            return "Jobs"
+
     return "Jobs"
 
 
@@ -126,40 +143,50 @@ async def scrape_portal(session: aiohttp.ClientSession, source: dict) -> list:
             soup = BeautifulSoup(html, "html.parser")
 
             # Look for common government portal notice structures
-            links = []
-
-            # Strategy 1: Look inside tables, marquees, news lists, and notice containers
             selectors = [
-                "table a", "ul.notices a", "div.news a", ".whats-new a", 
+                "table tr td a", "table a", "ul.notices a", "div.news a", ".whats-new a", 
                 "div.marquee a", ".views-table a", "ul.latest-news a",
-                "div#notice-board a", ".notification-list a", "a"
+                "div#notice-board a", ".notification-list a", ".card-body a", ".content a"
             ]
 
-            for selector in selectors:
-                found = soup.select(selector)
-                if len(found) > 3:
-                    links = found[:20]  # Take top 20 latest links
-                    break
+            collected_links = []
+            seen_hrefs = set()
 
-            for a_tag in links:
+            for selector in selectors:
+                for a_tag in soup.select(selector):
+                    href = a_tag.get("href", "").strip()
+                    if href and href not in seen_hrefs:
+                        seen_hrefs.add(href)
+                        collected_links.append(a_tag)
+
+            # If specific selectors didn't match, fallback to general 'a' tags
+            if len(collected_links) < 3:
+                for a_tag in soup.find_all("a"):
+                    href = a_tag.get("href", "").strip()
+                    if href and href not in seen_hrefs:
+                        seen_hrefs.add(href)
+                        collected_links.append(a_tag)
+
+            # Process up to 35 candidates per portal
+            for a_tag in collected_links[:35]:
                 text = a_tag.get_text(strip=True)
                 href = a_tag.get("href", "")
 
-                # Skip empty or navigational links
-                if not text or len(text) < 10 or not href or href.startswith("#") or href.startswith("javascript:"):
+                # Skip empty or non-functional links
+                if not text or len(text) < 8 or not href or href.startswith("#") or href.startswith("javascript:"):
                     continue
 
                 # Clean title
                 clean_title = re.sub(r'\s+', ' ', text).strip()
                 
-                # Filter out irrelevant header/footer text
-                irrelevant = ["contact us", "privacy policy", "terms", "sitemap", "home", "about us", "skip to content"]
+                # Filter out irrelevant header/footer navigation
+                irrelevant = ["contact us", "privacy policy", "terms", "sitemap", "home", "about us", "skip to content", "feedback", "screen reader"]
                 if any(irr in clean_title.lower() for irr in irrelevant):
                     continue
 
-                # STRICT MANDATE: Ignore data before 1 August 2026
+                # Filter out obsolete archives
                 if not is_notice_after_cutoff(clean_title, href):
-                    logger.debug(f"⏩ [CUTOFF FILTER] Skipped pre-August 2026 notice: {clean_title}")
+                    logger.debug(f"⏩ [CUTOFF FILTER] Skipped obsolete notice: {clean_title}")
                     continue
 
                 # Make absolute URL
@@ -176,15 +203,102 @@ async def scrape_portal(session: aiohttp.ClientSession, source: dict) -> list:
                     "vacancies": vacancies,
                     "source_site": source.get("name"),
                     "source_url": source.get("url"),
+                    "direct_login_url": full_url,
+                    "server2_url": source.get("url", full_url),
+                    "official_notice_pdf_url": full_url if full_url.lower().endswith(".pdf") else "",
+                    "merit_list_pdf_url": full_url if full_url.lower().endswith(".pdf") else "",
+                    "challenge_portal_url": full_url,
                 }
                 items.append(item)
 
             logger.info(f"✅ Scraped [{source['name']}]: Found {len(items)} notices")
+            CrawlerHealthMonitor.record_scrape_result(source.get("name", "Unknown"), True, len(items))
             return items
 
     except Exception as e:
         logger.warning(f"⚠️ Failed to scrape [{source['name']}]: {e}")
+        CrawlerHealthMonitor.record_scrape_result(source.get("name", "Unknown"), False, 0, str(e))
         return items
+
+
+async def resolve_deep_links_for_item(session: aiohttp.ClientSession, item: dict) -> dict:
+    """
+    DEEP LINK & AUTOMATED METADATA RESOLVER SYSTEM:
+    Transforms intermediate/homepage notices into direct candidate action URLs & parsed parameters:
+    - Direct Candidate Login form (Server 1)
+    - Direct PDF Roll Number List / Notification circular
+    - Automated parsed vacancies, qualification, fee, and dates via PdfMetadataParser
+    - Server 2 backup mirror
+    - Direct Objection Portal URL
+    """
+    category = item.get("category", "")
+    url = item.get("url", "")
+    
+    # If the URL is already a PDF document, mark it directly
+    if url.lower().endswith(".pdf"):
+        item["official_notice_pdf_url"] = url
+        item["merit_list_pdf_url"] = url
+        return item
+    
+    # For high-priority action categories, inspect intermediate page for real direct forms
+    if category in ["Admit Card", "Results", "Answer Key", "Jobs"]:
+        try:
+            headers = get_browser_headers()
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=7)) as resp:
+                if resp.status == 200:
+                    page_html = await resp.text()
+                    sub_soup = BeautifulSoup(page_html, "html.parser")
+                    
+                    # Extract page text for metadata parsing (vacancies, qualifications, dates, fee)
+                    page_text = sub_soup.get_text(separator=" ", strip=True)
+                    meta = PdfMetadataParser.extract_metadata(page_text, url)
+                    if meta.get("vacancies") and not item.get("vacancies"):
+                        item["vacancies"] = meta["vacancies"]
+                    if meta.get("qualification"):
+                        item["qualification"] = meta["qualification"]
+                    if meta.get("age_limit"):
+                        item["age_limit"] = meta["age_limit"]
+                    if meta.get("fee"):
+                        item["fee"] = meta["fee"]
+                    if meta.get("last_date"):
+                        item["last_date"] = meta["last_date"]
+
+                    login_keywords = ["login", "download", "hall ticket", "admit card", "scorecard", "response sheet", "candidate", "click here", "roll number", "objection", "apply online"]
+                    pdf_links = []
+                    action_links = []
+                    
+                    for a_elem in sub_soup.find_all("a", href=True):
+                        href = a_elem.get("href", "").strip()
+                        txt = a_elem.get_text(strip=True).lower()
+                        if not href or href.startswith("#") or href.startswith("javascript:"):
+                            continue
+                        
+                        full_sub_url = urllib.parse.urljoin(url, href)
+                        
+                        if href.lower().endswith(".pdf"):
+                            pdf_links.append(full_sub_url)
+                        
+                        if any(kw in txt for kw in login_keywords) or any(kw in href.lower() for kw in ["digialm", "login", "download", "online", "roll", "marksheet", "admit", "result", "answer", "apply"]):
+                            action_links.append((txt, full_sub_url))
+                    
+                    if action_links:
+                        # Pick best action link (prioritize digialm or login)
+                        best_action = action_links[0][1]
+                        for txt, link in action_links:
+                            if any(k in link.lower() for k in ["digialm", "candidate-login", "eadmit", "onlinebpsc", "ibpsonline"]):
+                                best_action = link
+                                break
+                        item["direct_login_url"] = best_action
+                        if len(action_links) > 1:
+                            item["server2_url"] = action_links[1][1]
+                    
+                    if pdf_links:
+                        item["official_notice_pdf_url"] = pdf_links[0]
+                        item["merit_list_pdf_url"] = pdf_links[0]
+        except Exception as err:
+            logger.debug(f"Deep link resolve non-blocking pass for {url}: {err}")
+
+    return item
 
 
 async def scrape_all_sources(central_links: list, state_links: list) -> list:
@@ -224,10 +338,11 @@ async def scrape_all_sources(central_links: list, state_links: list) -> list:
 
             logger.info(f"✅ [BATCH {batch_index + 1}/{total_batches} DONE] Discovered {batch_found_count} notices from {len(current_batch)} websites.")
 
-            # Human-like Anti-Bot Delay: 2 seconds pause before next batch
+            # Human-like Anti-Bot Delay: Randomized jitter pause before next batch
             if batch_index < total_batches - 1:
-                logger.info(f"⏳ [ANTI-BOT HUMAN DELAY] Pausing {delay_sec}s before next batch of {batch_size} websites to avoid firewall blocks...")
-                await asyncio.sleep(delay_sec)
+                jitter_delay = round(delay_sec + random.uniform(0.3, 1.4), 2)
+                logger.info(f"⏳ [ANTI-BOT JITTER] Pausing {jitter_delay}s before next batch of {batch_size} websites to avoid firewall/rate blocks...")
+                await asyncio.sleep(jitter_delay)
 
     # Deduplicate items by title
     seen_titles = set()
@@ -238,5 +353,16 @@ async def scrape_all_sources(central_links: list, state_links: list) -> list:
             seen_titles.add(title_key)
             unique_items.append(item)
 
-    logger.info(f"🎯 [ALL BATCHES COMPLETE] Scraped all {total_sources} portals. Total unique notices found: {len(unique_items)}")
+    # Resolve Deep Links for actionable items (Admit Cards, Results, Answer Keys)
+    logger.info("🔗 [DEEP LINK RESOLVER] Processing direct candidate login forms & PDF circulars...")
+    deep_resolve_connector = aiohttp.TCPConnector(limit=10, ssl=False)
+    async with aiohttp.ClientSession(connector=deep_resolve_connector) as deep_session:
+        resolve_tasks = []
+        for itm in unique_items:
+            if itm.get("category") in ["Admit Card", "Results", "Answer Key"]:
+                resolve_tasks.append(resolve_deep_links_for_item(deep_session, itm))
+        if resolve_tasks:
+            await asyncio.gather(*resolve_tasks, return_exceptions=True)
+
+    logger.info(f"🎯 [ALL BATCHES COMPLETE] Scraped all {total_sources} portals with Deep Links. Total unique notices found: {len(unique_items)}")
     return unique_items
