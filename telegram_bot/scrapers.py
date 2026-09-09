@@ -23,9 +23,15 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-# Try to import CrawlerHealthMonitor and PdfMetadataParser from smart_features
+# Try to import smart features
 try:
-    from smart_features import CrawlerHealthMonitor, PdfMetadataParser
+    from smart_features import (
+        CrawlerHealthMonitor,
+        PdfMetadataParser,
+        DeepPdfParserEngine,
+        Tier1FastPoller,
+        ServerLinkHealthRadar,
+    )
 except ImportError:
     class CrawlerHealthMonitor:
         @classmethod
@@ -33,6 +39,17 @@ except ImportError:
     class PdfMetadataParser:
         @classmethod
         def extract_metadata(cls, text, source_url=""): return {}
+    class DeepPdfParserEngine:
+        @classmethod
+        async def extract_from_pdf_url(cls, *args, **kwargs): return {}
+    class Tier1FastPoller:
+        @classmethod
+        async def poll_tier1_fast(cls, *args, **kwargs): return []
+    class ServerLinkHealthRadar:
+        @classmethod
+        async def check_link_health(cls, *args, **kwargs): return {"is_healthy": True}
+        @classmethod
+        def get_alternative_mirrors(cls, original_url: str): return []
 
 # Pool of realistic modern browser user-agents across Windows, Mac, Linux, Android, iOS
 ROTATING_USER_AGENTS = [
@@ -234,10 +251,17 @@ async def resolve_deep_links_for_item(session: aiohttp.ClientSession, item: dict
     category = item.get("category", "")
     url = item.get("url", "")
     
-    # If the URL is already a PDF document, mark it directly
+    # If the URL is already a PDF document, mark it directly and extract deep metadata
     if url.lower().endswith(".pdf"):
         item["official_notice_pdf_url"] = url
         item["merit_list_pdf_url"] = url
+        try:
+            pdf_meta = await DeepPdfParserEngine.extract_from_pdf_url(session, url, item.get("title", ""))
+            for k, v in pdf_meta.items():
+                if v and not item.get(k):
+                    item[k] = v
+        except Exception:
+            pass
         return item
     
     # For high-priority action categories, inspect intermediate page for real direct forms
@@ -295,8 +319,29 @@ async def resolve_deep_links_for_item(session: aiohttp.ClientSession, item: dict
                     if pdf_links:
                         item["official_notice_pdf_url"] = pdf_links[0]
                         item["merit_list_pdf_url"] = pdf_links[0]
+                        # Run Deep PDF extraction on primary notice PDF
+                        try:
+                            pdf_meta = await DeepPdfParserEngine.extract_from_pdf_url(session, pdf_links[0], item.get("title", ""))
+                            for k, v in pdf_meta.items():
+                                if v and not item.get(k):
+                                    item[k] = v
+                        except Exception:
+                            pass
         except Exception as err:
             logger.debug(f"Deep link resolve non-blocking pass for {url}: {err}")
+
+    # Check server link health and attach backup mirrors if down
+    try:
+        health = await ServerLinkHealthRadar.check_link_health(session, item.get("direct_login_url", url))
+        if not health.get("is_healthy", True):
+            item["server_status"] = "DOWN"
+            mirrors = ServerLinkHealthRadar.get_alternative_mirrors(url)
+            if mirrors:
+                item["server2_url"] = mirrors[0]
+                if len(mirrors) > 1:
+                    item["server3_url"] = mirrors[1]
+    except Exception:
+        pass
 
     return item
 

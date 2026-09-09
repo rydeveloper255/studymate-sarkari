@@ -30,6 +30,7 @@ try:
     import schedule
     from telegram import (
         Bot,
+        BotCommand,
         InlineKeyboardButton,
         InlineKeyboardMarkup,
         ReplyKeyboardMarkup,
@@ -95,6 +96,11 @@ from smart_features import (
     CrawlerHealthMonitor,
     ObjectionDeadlineTracker,
     TelegramWebAppHelper,
+    ScraperCycleReporter,
+    BannerImageGenerator,
+    AdmitCardReminderManager,
+    Tier1FastPoller,
+    ServerLinkHealthRadar,
 )
 
 # Initialize Smart Features Managers
@@ -295,8 +301,9 @@ def get_notification_inline_buttons(item: dict) -> InlineKeyboardMarkup:
         InlineKeyboardButton("📚 Exam Syllabus", callback_data=f"syl_{slug}"),
         InlineKeyboardButton("🎯 Check Eligibility", callback_data=f"elig_{slug}"),
     ])
-    # Row 3: Gazette Authenticity Badge
+    # Row 3: Personal Admit Card Alert + Gazette Authenticity Badge
     buttons.append([
+        InlineKeyboardButton("⏰ Remind Me For Admit Card", callback_data=f"remind_{slug}"),
         InlineKeyboardButton("🛡️ PIB / Gazette Verified", callback_data="fact_check_info")
     ])
 
@@ -366,22 +373,28 @@ async def send_telegram_alert(item: dict):
         targets.add("5165363865")
         targets.add("@Sarkariupdatealerts")
 
+    # Generate Dynamic Brand Alert Banner Image
+    banner_bytes = BannerImageGenerator.generate_alert_banner(item)
+
     for target_chat in targets:
         try:
             # If sending to a public channel, use attractive channel poster layout
-            if target_chat.startswith("@") or target_chat.startswith("-100"):
-                channel_poster = ChannelPosterBuilder.build_channel_poster(item)
-                await bot.send_message(
+            is_channel = target_chat.startswith("@") or target_chat.startswith("-100")
+            caption_text = ChannelPosterBuilder.build_channel_poster(item) if is_channel else text
+
+            if banner_bytes:
+                # Send high-impact photo banner with interactive markdown caption
+                await bot.send_photo(
                     chat_id=target_chat,
-                    text=channel_poster,
+                    photo=banner_bytes,
+                    caption=caption_text[:1024],
                     parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=reply_markup,
-                    disable_web_page_preview=False
+                    reply_markup=reply_markup
                 )
             else:
                 await bot.send_message(
                     chat_id=target_chat,
-                    text=text,
+                    text=caption_text,
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=reply_markup,
                     disable_web_page_preview=False
@@ -390,8 +403,65 @@ async def send_telegram_alert(item: dict):
         except Exception as e:
             logger.error(f"❌ Failed to broadcast to Telegram ({target_chat}): {e}")
 
+    # Dispatch Targeted Personal DMs to candidates who requested Admit Card Reminders
+    if "admit" in item.get("category", "").lower() or "exam city" in item.get("title", "").lower():
+        try:
+            matched = AdmitCardReminderManager.find_matching_subscribers(item)
+            for match in matched:
+                uid = match["user_id"]
+                sub = match["subscription"]
+                reg_info = f"\n🔖 *Your Registered Roll/App No:* `{sub.get('reg_number')}`" if sub.get("reg_number") else ""
+                dm_text = (
+                    "🔔 *PERSONAL ADMIT CARD ALERT FOR YOU!* 🎟️\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"Namaste! Aapne *{sub.get('display_name')}* ke admit card reminder ke liye subscribe kiya tha.\n\n"
+                    f"📌 *Notice:* {item.get('title')}\n"
+                    f"🏛️ *Department:* {item.get('department')}{reg_info}\n"
+                    "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    "👇 *Niche diye gaye direct server link se apna Hall Ticket / Admit Card download karein:*"
+                )
+                dm_btn = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🎟️ Direct Admit Card Download", url=item.get("url", WEBSITE_DOMAIN))],
+                    [InlineKeyboardButton("🌐 Open Portal", url=f"{WEBSITE_DOMAIN}#admit-card")]
+                ])
+                try:
+                    await bot.send_message(chat_id=uid, text=dm_text, parse_mode=ParseMode.MARKDOWN, reply_markup=dm_btn)
+                    logger.info(f"📲 Dispatched personal Admit Card DM to user {uid} for {sub.get('display_name')}")
+                except Exception as dm_err:
+                    logger.warning(f"Could not send personal reminder DM to {uid}: {dm_err}")
+        except Exception as err:
+            logger.warning(f"Admit card reminder dispatch error: {err}")
+
     # Also automatically broadcast to official WhatsApp Channel with exact website deep link
     await send_whatsapp_channel_alert(item)
+
+
+async def send_admin_direct_message(text: str, reply_markup=None):
+    """Sends high-priority operational/status messages directly to the Super Admin."""
+    if not bot:
+        logger.info(f"[SIMULATED ADMIN PING] ->\n{text}")
+        return
+
+    admin_targets = set()
+    if TELEGRAM_ADMIN_ID:
+        admin_targets.add(str(TELEGRAM_ADMIN_ID))
+    if TELEGRAM_CHAT_ID:
+        admin_targets.add(str(TELEGRAM_CHAT_ID))
+    if not admin_targets:
+        admin_targets.add("5165363865")
+
+    for target in admin_targets:
+        try:
+            await bot.send_message(
+                chat_id=target,
+                text=text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
+            logger.info(f"📲 Admin cycle alert sent to Telegram ({target})")
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to send admin direct message to {target}: {e}")
 
 
 # WhatsApp Channel Deduplication Registry (sent_whatsapp_posts.json)
@@ -814,40 +884,72 @@ def save_to_supabase(item: dict) -> bool:
         return False
 
 
-async def run_hourly_scrape_cycle():
+async def run_hourly_scrape_cycle(triggered_manually: bool = False):
     """Main autonomous scraping job executed every 5 minutes in human-simulated batches."""
-    cycle_start = datetime.utcnow()
+    total_portals = len(CENTRAL_GOVT_LINKS) + len(STATE_WISE_GOVT_LINKS)
+    cycle_no, start_msg = ScraperCycleReporter.start_cycle(total_portals=total_portals)
+
     logger.info("=" * 60)
-    logger.info(f"🚀 STARTING 5-MINUTE BATCHED CRAWL CYCLE AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"🚀 STARTING BATCHED CRAWL CYCLE #{cycle_no} AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Manual: {triggered_manually})")
     logger.info(f"Scanning {len(CENTRAL_GOVT_LINKS)} Central + {len(STATE_WISE_GOVT_LINKS)} State Portals (Batches of {SCRAPING_BATCH_SIZE}, {SCRAPING_BATCH_DELAY_SECONDS}s delay)...")
     logger.info("=" * 60)
 
+    # Automatically notify Super Admin that scraper cycle has started!
+    await send_admin_direct_message(start_msg)
+
     # Scrape all configured portals with 15-site batches and 2s human pacing
     discovered_items = await scrape_all_sources(CENTRAL_GOVT_LINKS, STATE_WISE_GOVT_LINKS)
-    new_count = 0
+    new_items_saved = []
+    duplicate_count = 0
 
     for item in discovered_items:
         is_new = save_to_supabase(item)
         if is_new:
-            new_count += 1
+            new_items_saved.append(item)
             await send_telegram_alert(item)
             await asyncio.sleep(1.5)  # Telegram API rate limit protection
+        else:
+            duplicate_count += 1
 
-    logger.info(f"✅ Scraping cycle completed. {len(discovered_items)} total scanned, {new_count} new alerts saved & posted.")
+    new_count = len(new_items_saved)
+    logger.info(f"✅ Scraping cycle #{cycle_no} completed. {len(discovered_items)} total scanned, {new_count} new alerts saved & posted ({duplicate_count} skipped).")
 
     # Record crawl session in public.scraper_logs
     if supabase and FIRST_SOURCE_ID:
         try:
             supabase.table("scraper_logs").insert({
                 "source_id": FIRST_SOURCE_ID,
-                "started_at": cycle_start.isoformat(),
+                "started_at": datetime.utcnow().isoformat(),
                 "finished_at": datetime.utcnow().isoformat(),
                 "status": "SUCCESS",
                 "new_records": new_count,
-                "updated_records": 0,
+                "updated_records": duplicate_count,
             }).execute()
         except Exception as err:
             logger.warning(f"⚠️ Could not record scraper_log: {err}")
+
+    # Generate finish summary card and notify Super Admin!
+    finish_msg = ScraperCycleReporter.finish_cycle(
+        cycle_no=cycle_no,
+        total_scanned=len(discovered_items),
+        new_items=new_items_saved,
+        duplicate_count=duplicate_count,
+        next_run_minutes=SCRAPING_INTERVAL_MINUTES
+    )
+
+    action_buttons = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔄 Scraper Status", callback_data="refresh_scraper_status"),
+            InlineKeyboardButton("⚡ Run Now", callback_data="forcescrape_now"),
+        ],
+        [
+            InlineKeyboardButton("📜 Cycle History", callback_data="view_scraper_history"),
+            InlineKeyboardButton("🌐 Open WebApp", web_app=WebAppInfo(url=WEBSITE_DOMAIN)),
+        ]
+    ])
+
+    await send_admin_direct_message(finish_msg, reply_markup=action_buttons)
+    return cycle_no, new_count, finish_msg
 
 
 # ==============================================================================
@@ -876,6 +978,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• 📚 `/syllabus` - Complete Tier-1/2 Exam Pattern & Marks\n"
         "• 🛡️ `/verify` - WhatsApp/Telegram viral notice fact-checker\n"
         "• 💼 `/live` - Real-time active vacancies (Aug 2026+)\n"
+        "• 📊 `/scraperstatus` or `/status` - Live Scraper Pulse & Last Yield\n"
+        "• ⚡ `/forcescrape` or `/runnow` - Trigger Instant All-Portal Scrape\n"
+        "• 🎟️ `/remindme <exam> [roll]` - 1-Click Personal Admit Card DM Alert\n"
+        "• 📋 `/myreminders` - Check all active admit card subscriptions\n"
+        "• 📜 `/history` - Audit log of previous scraper cycles\n"
         "• ⚡ `/quickpush` - Admin direct emergency breaking notice broadcast\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "👇 *Niche diye gaye options chuney ya koi v sawal Hindi/English me puchein:*"
@@ -884,9 +991,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     main_keyboard = ReplyKeyboardMarkup(
         [
             [KeyboardButton("🌐 Sarkari Mini App"), KeyboardButton("🔍 Roll Number Search")],
-            [KeyboardButton("🔔 Alert Preferences"), KeyboardButton("⏰ Deadline Radar")],
-            [KeyboardButton("🎯 Check My Eligibility"), KeyboardButton("📚 Exam Syllabus")],
-            [KeyboardButton("🧠 Daily GK Quiz"), KeyboardButton("🛡️ Verify Notice")],
+            [KeyboardButton("🎟️ Admit Card Reminder"), KeyboardButton("📊 Scraper Status")],
+            [KeyboardButton("⚡ Force Scrape"), KeyboardButton("⏰ Deadline Radar")],
+            [KeyboardButton("🔔 Alert Preferences"), KeyboardButton("🎯 Check My Eligibility")],
+            [KeyboardButton("📚 Exam Syllabus"), KeyboardButton("🧠 Daily GK Quiz")],
             [KeyboardButton("💼 Live Active Jobs"), KeyboardButton("🛡️ Crawler Radar")],
         ],
         resize_keyboard=True,
@@ -1268,6 +1376,158 @@ async def cmd_adminstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(stats_msg, parse_mode=ParseMode.MARKDOWN)
 
 
+async def cmd_scraperstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Displays real-time scraper running status, last yield, and next run countdown."""
+    status_report = ScraperCycleReporter.get_status_report(SCRAPING_INTERVAL_MINUTES)
+    buttons = [
+        [
+            InlineKeyboardButton("🔄 Refresh Status", callback_data="refresh_scraper_status"),
+            InlineKeyboardButton("⚡ Force Scrape Now", callback_data="forcescrape_now"),
+        ],
+        [
+            InlineKeyboardButton("📜 Cycle History", callback_data="view_scraper_history"),
+            InlineKeyboardButton("🛡️ Crawler Health Radar", callback_data="refresh_crawler_status"),
+        ]
+    ]
+    await update.message.reply_text(
+        status_report,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def cmd_forcescrape(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Allows Admin to manually trigger an immediate scraping round across all 250+ portals."""
+    user_id = str(update.effective_user.id)
+    # Admin check
+    if user_id != str(TELEGRAM_ADMIN_ID) and user_id != "5165363865":
+        await update.message.reply_text("⛔ *Unauthorized:* Only the Super Admin can trigger manual force scrape.", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    if ScraperCycleReporter.is_currently_running():
+        await update.message.reply_text(
+            "⚠️ *Scraper Already In Progress!*\nEk crawl cycle abhi chal raha hai. Kripya uske completion alert ka intezar karein.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    await update.message.reply_text(
+        "⚡ *Initiating Immediate Force Scrape Across All 250+ Portals...*\n_Aapko live Start aur Finish report abhi prapt hogi._",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    # Trigger asynchronously
+    asyncio.create_task(run_hourly_scrape_cycle(triggered_manually=True))
+
+
+async def cmd_scraperhistory(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Displays audit history of recent scraping runs."""
+    history_report = ScraperCycleReporter.get_history_report()
+    buttons = [
+        [
+            InlineKeyboardButton("🔄 Scraper Status", callback_data="refresh_scraper_status"),
+            InlineKeyboardButton("⚡ Run Now", callback_data="forcescrape_now"),
+        ]
+    ]
+    await update.message.reply_text(
+        history_report,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(buttons)
+    )
+
+
+async def cmd_remindme(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Subscribes candidate to get automated personal DMs when their Admit Card / Exam City is out."""
+    user = update.effective_user
+    user_id = str(user.id)
+    args = context.args
+
+    if not args:
+        user_subs = AdmitCardReminderManager.get_user_subscriptions(user_id)
+        subs_text = ""
+        if user_subs:
+            subs_text = "\n\n📌 *Aapke Active Subscriptions:*\n" + "\n".join([
+                f"  • *{s.get('display_name')}*" + (f" (Roll/Reg: `{s.get('reg_number')}`)" if s.get('reg_number') else "")
+                for s in user_subs
+            ])
+
+        help_text = (
+            "⏰ *STUDYMATE SARKARI - PERSONAL ADMIT CARD TRACKER*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Jab bhi aapke form ka Admit Card ya Exam City slip jari hoga, "
+            "bot turant aapko *Personal Message (DM)* bhejkar jagayega!\n\n"
+            "👉 *Usage:* `/remindme <EXAM_NAME> [ROLL/REG_NO]`\n\n"
+            "📌 *Examples:*\n"
+            "  • `/remindme SSC GD`\n"
+            "  • `/remindme UP Police 6024419208`\n"
+            "  • `/remindme RRB NTPC 1155829103`\n"
+            "  • `/remindme BPSC 70th`\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            f"{subs_text}\n"
+            "💡 _Aapke Admit Card ka direct link aate hi turant aapki chat par bhej diya jayega!_"
+        )
+        await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    exam_name = args[0]
+    reg_number = ""
+    if len(args) > 1:
+        # Check if last argument is digits/registration number
+        if any(c.isdigit() for c in args[-1]) and len(args[-1]) >= 4:
+            reg_number = args[-1]
+            exam_name = " ".join(args[:-1])
+        else:
+            exam_name = " ".join(args)
+
+    res = AdmitCardReminderManager.add_subscription(
+        user_id=user_id,
+        exam_keyword=exam_name,
+        reg_number=reg_number,
+        candidate_name=user.first_name or "Candidate"
+    )
+
+    reg_msg = f"\n🔖 *Saved Registration/Roll No:* `{reg_number}`" if reg_number else ""
+    success_text = (
+        f"✅ *Admit Card Reminder Activated!* 🎟️\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🎯 *Exam Tracked:* `{exam_name}`{reg_msg}\n"
+        f"👤 *Candidate:* {user.first_name}\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "⚡ StudyMate Crawler is 24x7 monitoring the official recruitment portal. "
+        "Jaise hi Hall Ticket / City Intimation Slip live hogi, bot aapko direct link ke sath DM bhejega!\n\n"
+        "👉 Sabhi reminders dekhne ke liye `/myreminders` likhein."
+    )
+    buttons = [
+        [InlineKeyboardButton("📋 My Subscriptions", callback_data="show_my_reminders")],
+        [InlineKeyboardButton("🌐 Open WebApp Portal", web_app=WebAppInfo(url=WEBSITE_DOMAIN))]
+    ]
+    await update.message.reply_text(success_text, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def cmd_myreminders(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Displays user's active personal exam admit card trackers."""
+    user_id = str(update.effective_user.id)
+    user_subs = AdmitCardReminderManager.get_user_subscriptions(user_id)
+    if not user_subs:
+        await update.message.reply_text(
+            "ℹ️ *Aapne abhi tak kisi Admit Card reminder ko subscribe nahi kiya hai.*\n\n"
+            "Naya alert set karne ke liye aise likhein:\n`/remindme UP Police 6024419208`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    lines = [
+        "📋 *AAPKE ACTIVE ADMIT CARD REMINDERS*",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+    for idx, s in enumerate(user_subs, 1):
+        reg = f" | 🔖 `{s.get('reg_number')}`" if s.get("reg_number") else ""
+        lines.append(f"{idx}. 🎟️ *{s.get('display_name')}*{reg} (Subscribed on {s.get('subscribed_at')})")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("💡 _Kisi reminder ko hatane ke liye_: `/cancelreminder <exam_name>`")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles inline buttons click events."""
     query = update.callback_query
@@ -1286,6 +1546,32 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             "🎯 *Check Your Eligibility:*\nApna DOB, Category aur Qualification aise bhejein:\n`/eligibility 15-08-2001 OBC Graduate`",
             parse_mode=ParseMode.MARKDOWN
         )
+
+    elif data.startswith("remind_"):
+        exam_tag = data.replace("remind_", "").replace("_", " ").title()
+        res = AdmitCardReminderManager.add_subscription(
+            user_id=str(uid),
+            exam_keyword=exam_tag,
+            candidate_name=query.from_user.first_name or "Candidate"
+        )
+        await query.message.reply_text(
+            f"✅ *Admit Card Reminder Activated for '{exam_tag}'!* 🎟️\n\n"
+            f"Jaise hi is exam ka Admit Card ya City Intimation slip jari hoga, "
+            f"StudyMate Bot aapko direct official link ke sath turant message bhejega.\n\n"
+            f"📌 *Roll/Registration number jodne ke liye*: `/remindme {exam_tag} <ROLL_NO>`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    elif data == "show_my_reminders":
+        user_subs = AdmitCardReminderManager.get_user_subscriptions(str(uid))
+        if not user_subs:
+            await query.message.reply_text("ℹ️ Aapka koi active reminder nahi hai.", parse_mode=ParseMode.MARKDOWN)
+        else:
+            lines = ["📋 *Aapke Subscribed Admit Card Reminders:*"]
+            for s in user_subs:
+                reg = f" (Roll: `{s.get('reg_number')}`)" if s.get("reg_number") else ""
+                lines.append(f"• 🎟️ *{s.get('display_name')}*{reg}")
+            await query.message.reply_text("\n".join(lines), parse_mode=ParseMode.MARKDOWN)
 
     elif data == "fact_check_info":
         await query.message.reply_text(
@@ -1328,6 +1614,37 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             [InlineKeyboardButton("🌐 Open WebApp Portal", web_app=WebAppInfo(url=WEBSITE_DOMAIN))]
         ]
         await query.edit_message_text(report, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+
+    elif data == "refresh_scraper_status":
+        report = ScraperCycleReporter.get_status_report(SCRAPING_INTERVAL_MINUTES)
+        buttons = [
+            [
+                InlineKeyboardButton("🔄 Refresh Status", callback_data="refresh_scraper_status"),
+                InlineKeyboardButton("⚡ Force Scrape Now", callback_data="forcescrape_now"),
+            ],
+            [
+                InlineKeyboardButton("📜 Cycle History", callback_data="view_scraper_history"),
+                InlineKeyboardButton("🛡️ Crawler Health Radar", callback_data="refresh_crawler_status"),
+            ]
+        ]
+        await query.edit_message_text(report, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
+
+    elif data == "forcescrape_now":
+        if ScraperCycleReporter.is_currently_running():
+            await query.message.reply_text("⚠️ *Scraper Already Running:* Ek cycle abhi chal raha hai. Kripya finish report ka wait karein.", parse_mode=ParseMode.MARKDOWN)
+        else:
+            await query.message.reply_text("⚡ *Force Scrape Started!* All 250+ Portals crawl shuru ho chuka hai...", parse_mode=ParseMode.MARKDOWN)
+            asyncio.create_task(run_hourly_scrape_cycle(triggered_manually=True))
+
+    elif data == "view_scraper_history":
+        history = ScraperCycleReporter.get_history_report()
+        buttons = [
+            [
+                InlineKeyboardButton("🔄 Scraper Status", callback_data="refresh_scraper_status"),
+                InlineKeyboardButton("⚡ Run Now", callback_data="forcescrape_now"),
+            ]
+        ]
+        await query.edit_message_text(history, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data == "check_eligibility_quick":
         await query.message.reply_text(
@@ -1421,8 +1738,20 @@ async def handle_text_messages(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode=ParseMode.MARKDOWN
         )
         return
+    elif text in ["🎟️ Admit Card Reminder", "Admit Card Reminder", "Remind Me"]:
+        await cmd_remindme(update, context)
+        return
     elif text in ["🛡️ Crawler Radar", "Crawler Health"]:
         await cmd_crawlerstatus(update, context)
+        return
+    elif text in ["📊 Scraper Status", "Scraper Status", "Status"]:
+        await cmd_scraperstatus(update, context)
+        return
+    elif text in ["⚡ Force Scrape", "Force Scrape", "Run Scraper"]:
+        await cmd_forcescrape(update, context)
+        return
+    elif text in ["📜 Cycle History", "Scraper History"]:
+        await cmd_scraperhistory(update, context)
         return
     elif text in ["🔑 Objection Radar", "Objections"]:
         await cmd_objections(update, context)
@@ -1503,6 +1832,17 @@ async def run_crawler_and_polling():
         app.add_handler(CommandHandler("verify", cmd_verify))
         app.add_handler(CommandHandler("live", cmd_live))
         app.add_handler(CommandHandler("quickpush", cmd_quickpush))
+        app.add_handler(CommandHandler("scraperstatus", cmd_scraperstatus))
+        app.add_handler(CommandHandler("status", cmd_scraperstatus))
+        app.add_handler(CommandHandler("lastrun", cmd_scraperstatus))
+        app.add_handler(CommandHandler("forcescrape", cmd_forcescrape))
+        app.add_handler(CommandHandler("runnow", cmd_forcescrape))
+        app.add_handler(CommandHandler("scraperhistory", cmd_scraperhistory))
+        app.add_handler(CommandHandler("history", cmd_scraperhistory))
+        app.add_handler(CommandHandler("remindme", cmd_remindme))
+        app.add_handler(CommandHandler("remind", cmd_remindme))
+        app.add_handler(CommandHandler("myreminders", cmd_myreminders))
+        app.add_handler(CommandHandler("admitcard", cmd_remindme))
         app.add_handler(CommandHandler("adminstats", cmd_adminstats))
         app.add_handler(CommandHandler("stats", cmd_adminstats))
 
@@ -1519,12 +1859,54 @@ async def run_crawler_and_polling():
         async def scheduled_crawler_job(ctx: ContextTypes.DEFAULT_TYPE):
             await run_hourly_scrape_cycle()
 
+        async def scheduled_tier1_fast_radar(ctx: ContextTypes.DEFAULT_TYPE):
+            """Fast 60s micro-radar for Mega Giants (SSC, RRB, UPSC, UP Police, BPSC, NTA)"""
+            import aiohttp
+            try:
+                connector = aiohttp.TCPConnector(ssl=False)
+                async with aiohttp.ClientSession(connector=connector) as session:
+                    mod_portals = await Tier1FastPoller.poll_tier1_fast(session)
+                    if mod_portals:
+                        logger.info(f"⚡ [TIER-1 FLASH RADAR] Detected immediate update on {len(mod_portals)} Mega Portals: {[p['name'] for p in mod_portals]}")
+                        # Immediately trigger targeted scrape for fresh release
+                        asyncio.create_task(run_hourly_scrape_cycle(triggered_manually=True))
+            except Exception as e:
+                logger.debug(f"Tier-1 fast check pass: {e}")
+
         if app.job_queue:
             app.job_queue.run_repeating(scheduled_crawler_job, interval=interval_seconds, first=10)
-            logger.info(f"⏰ Autonomous Scraper registered in JobQueue (runs every {SCRAPING_INTERVAL_MINUTES} min in batches of {SCRAPING_BATCH_SIZE} sites with {SCRAPING_BATCH_DELAY_SECONDS}s anti-bot delay).")
+            app.job_queue.run_repeating(scheduled_tier1_fast_radar, interval=60, first=20)
+            logger.info(f"⏰ Autonomous Scraper registered in JobQueue (runs every {SCRAPING_INTERVAL_MINUTES} min + Tier-1 Fast Radar every 60s).")
 
         await app.initialize()
         await app.start()
+
+        # Register Bot Commands Menu in Telegram Client
+        try:
+            bot_commands = [
+                BotCommand("start", "🏠 Home menu & smart features overview"),
+                BotCommand("findroll", "🔍 Search candidate roll number in merit list"),
+                BotCommand("remindme", "🎟️ 1-click personal admit card release alert"),
+                BotCommand("myreminders", "📋 View your active admit card tracking list"),
+                BotCommand("app", "🌐 Open Sarkari Live WebApp inside Telegram"),
+                BotCommand("deadlines", "⏳ Form closing alerts & countdowns (24h/3d)"),
+                BotCommand("objections", "🔑 Answer key objection windows radar"),
+                BotCommand("crawlerstatus", "🛡️ Check 250+ official portals crawler health"),
+                BotCommand("status", "📊 Live scraper engine status & last run yield"),
+                BotCommand("forcescrape", "⚡ Trigger instant manual scrape on all portals"),
+                BotCommand("history", "📜 Previous crawler execution cycles audit log"),
+                BotCommand("eligibility", "🎯 Smart age limit & qualification calculator"),
+                BotCommand("quiz", "🧠 Daily Sarkari GK & Current Affairs quiz"),
+                BotCommand("syllabus", "📚 Exam pattern, tier-wise marks & syllabus"),
+                BotCommand("verify", "🛡️ Viral WhatsApp/Telegram notice fact-check"),
+                BotCommand("live", "💼 Live ongoing government vacancies"),
+                BotCommand("setpreference", "⚙️ Personalize exam & state alert preferences"),
+            ]
+            await app.bot.set_my_commands(bot_commands)
+            logger.info(f"✅ Registered {len(bot_commands)} commands to Telegram Bot Menu.")
+        except Exception as e:
+            logger.warning(f"Failed to set Telegram bot commands menu: {e}")
+
         await app.updater.start_polling()
         logger.info("⚡ Telegram Bot is polling for user commands and inline queries!")
 
