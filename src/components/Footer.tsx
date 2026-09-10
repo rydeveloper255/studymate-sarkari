@@ -208,11 +208,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram, isAd
                   Syllabus Breakdown PDF
                 </button>
               </li>
-              <li>
-                <button onClick={() => onNavigate('telegram-bot')} className="hover:text-[#00236f] text-left">
-                  Auto Scraper Manager
-                </button>
-              </li>
+              {isAdmin && (
+                <li>
+                  <button onClick={() => onNavigate('telegram-bot')} className="hover:text-[#00236f] text-left font-bold text-emerald-600 dark:text-emerald-400">
+                    👑 Auto Scraper Manager
+                  </button>
+                </li>
+              )}
             </ul>
           </div>
 
@@ -273,7 +275,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onOpenTelegram, isAd
             </div>
 
             <div className="text-center md:text-right font-medium text-[11px] flex-shrink-0">
-              © 2025 StudyMate Sarkari. All rights reserved.
+              © {new Date().getFullYear()} StudyMate Sarkari. All rights reserved.
             </div>
           </div>
         </div>

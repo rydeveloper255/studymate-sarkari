@@ -5,6 +5,12 @@ import { JobDiscussionForum } from './JobDiscussionForum';
 import { StoryCardModal } from './StoryCardModal';
 import { EligibilityCalculatorModal } from './EligibilityCalculatorModal';
 import { useLanguage } from '../context/LanguageContext';
+import { InHandSalaryCalculator } from './candidate-tools/InHandSalaryCalculator';
+import { PreviousYearCutoffArchive } from './candidate-tools/PreviousYearCutoffArchive';
+import { MasterProfileFiller } from './candidate-tools/MasterProfileFiller';
+import { ExamCenterGuide } from './candidate-tools/ExamCenterGuide';
+import { DobEligibilityTimeline } from './candidate-tools/DobEligibilityTimeline';
+import { ZeroAdPdfMirror } from './candidate-tools/ZeroAdPdfMirror';
 
 export interface JobDetailViewProps {
   job: JobItem;
@@ -162,11 +168,13 @@ ${getShareUrl()}
 
   const navSections = [
     { id: 'dates', label: 'Important Dates', icon: 'calendar_month' },
+    { id: 'salary-calc', label: 'In-Hand Salary', icon: 'calculate' },
+    { id: 'cutoff-archive', label: 'Cut-Off Archive', icon: 'bar_chart' },
     { id: 'fee', label: 'Application Fee', icon: 'payments' },
-    { id: 'age', label: 'Age Limit', icon: 'cake' },
+    { id: 'dob-timeline', label: 'Age Timeline', icon: 'hourglass_top' },
     { id: 'vacancies', label: 'Post-Wise Vacancies', icon: 'view_list' },
-    { id: 'pattern', label: 'Exam Pattern', icon: 'analytics' },
-    { id: 'how-to-apply', label: 'How to Apply', icon: 'checklist' },
+    { id: 'master-profile', label: 'Master Profile', icon: 'content_paste' },
+    { id: 'exam-center-guide', label: 'Center Guide', icon: 'directions_bus' },
     { id: 'direct-links', label: 'Official Links', icon: 'link' },
   ];
 
@@ -391,7 +399,7 @@ ${getShareUrl()}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left 2 Cols: Main In-Depth Guide Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Section 1: Important Dates Schedule */}
+            {/* Section 1: Important Dates Schedule */}
           <div id="dates" className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs scroll-mt-36">
             <h2 className="font-display font-extrabold text-lg text-[#00236f] flex items-center gap-2 mb-4">
               <span className="material-symbols-outlined text-[22px]">calendar_month</span>
@@ -423,6 +431,19 @@ ${getShareUrl()}
               </table>
             </div>
           </div>
+
+          {/* Zero-Ads Direct Official PDF Mirror Downloader */}
+          <ZeroAdPdfMirror
+            officialPdfUrl={job.officialNotificationUrl || job.applyUrl || 'https://ssc.gov.in'}
+            jobTitle={job.title}
+            advtNo={job.advtNo}
+          />
+
+          {/* Interactive In-Hand Salary Calculator (7th CPC Matrix) */}
+          <InHandSalaryCalculator defaultPayLevel={job.payLevel} />
+
+          {/* Category-wise Cut-Off Marks Archive */}
+          <PreviousYearCutoffArchive jobTitle={job.title} department={job.department} />
 
           {/* Section 2: Application Fee & Payment Gateway */}
           <div id="fee" className="bg-white rounded-2xl border border-[#d3e4fe] p-6 shadow-xs scroll-mt-36">
@@ -478,6 +499,11 @@ ${getShareUrl()}
                   <tr><td className="p-2.5">Ex-Servicemen (ESM)</td><td className="p-2.5 text-right font-bold text-[#004a32]">3 Years after deduction of service</td></tr>
                 </tbody>
               </table>
+            </div>
+
+            {/* Visual DOB Eligibility & Age Relaxation Timeline */}
+            <div className="mt-5">
+              <DobEligibilityTimeline minAge={18} maxAge={27} crucialDateStr={job.crucialAgeDate || '01-08-2026'} />
             </div>
           </div>
 
@@ -836,6 +862,12 @@ ${getShareUrl()}
               </div>
             </div>
           </div>
+
+          {/* 1-Click Master Profile Form Filler */}
+          <MasterProfileFiller />
+
+          {/* Live Exam Center Distance & Transit Route Guide */}
+          <ExamCenterGuide examName={job.title} />
         </div>
 
         {/* Right 1 Col: Interactive Countdown, Calculator & Alert Box */}

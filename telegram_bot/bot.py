@@ -20,6 +20,7 @@ import re
 import hashlib
 import asyncio
 import logging
+import urllib.parse
 from datetime import datetime, date
 from dotenv import load_dotenv
 
@@ -66,8 +67,11 @@ from config import (
     WEBSITE_DOMAIN,
     SUPABASE_URL,
     SUPABASE_KEY,
+    DAY_INTERVAL_MINUTES,
+    NIGHT_INTERVAL_MINUTES,
     SCRAPING_INTERVAL_MINUTES,
     SCRAPING_INTERVAL_HOURS,
+    get_current_scraping_interval_minutes,
     SCRAPING_BATCH_SIZE,
     SCRAPING_BATCH_DELAY_SECONDS,
     CENTRAL_GOVT_LINKS,
@@ -250,50 +254,67 @@ def format_telegram_message(item: dict) -> str:
     if item.get("last_date"):
         msg += f"⏳ *Application Last Date:* `{item['last_date']}`\n"
 
+    # Brand deep-link to our portal
+    site_link = item.get("deep_link") or f"{WEBSITE_DOMAIN}#job-detail?id={re.sub(r'[^a-z0-9]+', '-', item.get('title', '').lower()).strip('-')[:60]}"
+    if item.get("category") == "Admit Card":
+        site_link = f"{WEBSITE_DOMAIN}#admit-card"
+    elif item.get("category") == "Results":
+        site_link = f"{WEBSITE_DOMAIN}#results"
+    elif item.get("category") == "Answer Key":
+        site_link = f"{WEBSITE_DOMAIN}#answer-key"
+
     msg += (
         f"🛡️ *Authenticity:* `✅ PIB / Gazette Verified`\n"
         f"🕒 *Release Time:* {datetime.now().strftime('%d %b %Y, %I:%M %p')}\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"⚡ _Verified directly from official government gazette portal._\n"
-        f"👉 Portal: https://studymate-sarkari.onrender.com"
+        f"👉 *Apply & View on Our Website:* [Click Here]({site_link})\n"
+        f"🌐 StudyMate Sarkari: {WEBSITE_DOMAIN}"
     )
     return msg
 
 
 def get_notification_inline_buttons(item: dict) -> InlineKeyboardMarkup:
-    """Generates direct action buttons: PDF, Apply, Syllabus, and Eligibility check."""
-    url = item.get("url", "https://studymate-sarkari.onrender.com")
+    """Generates direct action buttons linking directly to candidate action and our website portal."""
     cat = item.get("category", "Jobs")
+    # Action URL: official direct login / PDF if available, otherwise website deep link
+    site_deep = item.get("deep_link") or f"{WEBSITE_DOMAIN}#job-detail?id={re.sub(r'[^a-z0-9]+', '-', item.get('title', '').lower()).strip('-')[:60]}"
+    if cat == "Admit Card":
+        site_deep = f"{WEBSITE_DOMAIN}#admit-card"
+    elif cat == "Results":
+        site_deep = f"{WEBSITE_DOMAIN}#results"
+    elif cat == "Answer Key":
+        site_deep = f"{WEBSITE_DOMAIN}#answer-key"
+
+    action_url = item.get("direct_login_url") or item.get("url") or site_deep
 
     buttons = []
-    # Row 1: Direct Action Links
+    # Row 1: Direct Action Links & Our Website Portal
     if cat in ["Jobs", "Latest Job"]:
         buttons.append([
-            InlineKeyboardButton("📥 Notification PDF", url=url),
-            InlineKeyboardButton("📝 Apply Online", url=url),
+            InlineKeyboardButton("🌐 Open in Our Portal", url=site_deep),
+            InlineKeyboardButton("📝 Direct Apply", url=action_url),
         ])
     elif cat == "Admit Card":
         buttons.append([
-            InlineKeyboardButton("🎫 Download Admit Card", url=url),
-            InlineKeyboardButton("📍 Exam City Slip", url=url),
+            InlineKeyboardButton("🌐 Open in Our Portal", url=site_deep),
+            InlineKeyboardButton("🎫 Download Admit Card", url=action_url),
         ])
     elif cat == "Results":
         buttons.append([
-            InlineKeyboardButton("🏆 Check Merit List / Result", url=url),
-            InlineKeyboardButton("📊 Cut-Off Marks", url=url),
+            InlineKeyboardButton("🌐 Open in Our Portal", url=site_deep),
+            InlineKeyboardButton("🏆 Check Result", url=action_url),
         ])
     elif cat == "Answer Key":
         buttons.append([
-            InlineKeyboardButton("🔑 Download Answer Key", url=url),
-            InlineKeyboardButton("📝 Submit Objection", url=url),
-        ])
-    elif cat in ["Pre-Vacancy / Notification", "Notification"]:
-        buttons.append([
-            InlineKeyboardButton("📄 View Short Notice / Circular", url=url),
-            InlineKeyboardButton("🌐 Official Portal", url=item.get("source_url", url)),
+            InlineKeyboardButton("🌐 Open in Our Portal", url=site_deep),
+            InlineKeyboardButton("🔑 Download Key", url=action_url),
         ])
     else:
-        buttons.append([InlineKeyboardButton("🔗 Open Official Notice", url=url)])
+        buttons.append([
+            InlineKeyboardButton("🌐 View on Our Website", url=site_deep),
+            InlineKeyboardButton("🔗 Official Link", url=action_url),
+        ])
 
     # Row 2: Smart Services (Syllabus & Eligibility)
     slug = re.sub(r'[^a-z0-9]+', '_', item.get("title", "").lower())[:20]
@@ -301,10 +322,13 @@ def get_notification_inline_buttons(item: dict) -> InlineKeyboardMarkup:
         InlineKeyboardButton("📚 Exam Syllabus", callback_data=f"syl_{slug}"),
         InlineKeyboardButton("🎯 Check Eligibility", callback_data=f"elig_{slug}"),
     ])
-    # Row 3: Personal Admit Card Alert + Gazette Authenticity Badge
+    # Row 3: Personal Admit Card Alert + WhatsApp Viral Share Button
+    title_encoded = urllib.parse.quote(f"🔥 *{item.get('title')}*\n👉 Apply / View Details on StudyMate Sarkari:\n{site_deep}")
+    wa_share_url = f"https://api.whatsapp.com/send?text={title_encoded}"
+
     buttons.append([
-        InlineKeyboardButton("⏰ Remind Me For Admit Card", callback_data=f"remind_{slug}"),
-        InlineKeyboardButton("🛡️ PIB / Gazette Verified", callback_data="fact_check_info")
+        InlineKeyboardButton("⏰ Remind Me", callback_data=f"remind_{slug}"),
+        InlineKeyboardButton("📲 WhatsApp Group Share", url=wa_share_url),
     ])
 
     return InlineKeyboardMarkup(buttons)
@@ -885,16 +909,29 @@ def save_to_supabase(item: dict) -> bool:
 
 
 async def run_hourly_scrape_cycle(triggered_manually: bool = False):
-    """Main autonomous scraping job executed every 5 minutes in human-simulated batches."""
+    """
+    Main autonomous scraping job executed dynamically:
+    - Day (06:00 to 23:59 IST): Every 20 minutes
+    - Night (00:00 to 05:59 IST): Every 3 hours (180 minutes)
+    In human-simulated batches of 15 portals with anti-bot pacing.
+    Sends live Start and Finish reports with scraped details to Telegram.
+    """
+    next_interval = get_current_scraping_interval_minutes()
+    is_night = next_interval >= 120
+    sched_mode_str = "🌙 NIGHT MODE (Har 3 Ghante)" if is_night else "☀️ DAY MODE (Har 20 Minute)"
+
     total_portals = len(CENTRAL_GOVT_LINKS) + len(STATE_WISE_GOVT_LINKS)
-    cycle_no, start_msg = ScraperCycleReporter.start_cycle(total_portals=total_portals)
+    cycle_no, start_msg = ScraperCycleReporter.start_cycle(
+        total_portals=total_portals,
+        schedule_mode=sched_mode_str
+    )
 
     logger.info("=" * 60)
-    logger.info(f"🚀 STARTING BATCHED CRAWL CYCLE #{cycle_no} AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Manual: {triggered_manually})")
+    logger.info(f"🚀 STARTING BATCHED CRAWL CYCLE #{cycle_no} AT {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} (Manual: {triggered_manually}, Schedule: {sched_mode_str})")
     logger.info(f"Scanning {len(CENTRAL_GOVT_LINKS)} Central + {len(STATE_WISE_GOVT_LINKS)} State Portals (Batches of {SCRAPING_BATCH_SIZE}, {SCRAPING_BATCH_DELAY_SECONDS}s delay)...")
     logger.info("=" * 60)
 
-    # Automatically notify Super Admin that scraper cycle has started!
+    # Automatically notify Super Admin / Bot Chat that scraper cycle has started!
     await send_admin_direct_message(start_msg)
 
     # Scrape all configured portals with 15-site batches and 2s human pacing
@@ -928,13 +965,14 @@ async def run_hourly_scrape_cycle(triggered_manually: bool = False):
         except Exception as err:
             logger.warning(f"⚠️ Could not record scraper_log: {err}")
 
-    # Generate finish summary card and notify Super Admin!
+    # Generate finish summary card and notify Super Admin / Bot Chat!
     finish_msg = ScraperCycleReporter.finish_cycle(
         cycle_no=cycle_no,
         total_scanned=len(discovered_items),
         new_items=new_items_saved,
         duplicate_count=duplicate_count,
-        next_run_minutes=SCRAPING_INTERVAL_MINUTES
+        next_run_minutes=next_interval,
+        schedule_mode=sched_mode_str
     )
 
     action_buttons = InlineKeyboardMarkup([
@@ -1343,6 +1381,111 @@ async def cmd_quickpush(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ *Emergency Alert Pushed Successfully!*\n\n📌 *Title:* {title}\n🏷️ *Category:* {category}\n🔗 *URL:* {url}", parse_mode=ParseMode.MARKDOWN)
 
 
+async def cmd_import(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    SUPER-ADMIN 1-CLICK CHANNEL & NOTICE INGESTER:
+    Usage: /import <Notice Title or URL or forwarded text>
+    - Automatically strips any competitor/third-party/affiliate links.
+    - Resolves official government (.gov.in / .nic.in / PDF) apply portals.
+    - Adds to Supabase database.
+    - Dispatches to Telegram Channel (@Sarkariupdatealerts) with StudyMate Sarkari website deep link!
+    """
+    user_id = str(update.effective_user.id)
+    if user_id != str(TELEGRAM_ADMIN_ID) and user_id != "5165363865":
+        await update.message.reply_text("⛔ *Unauthorized:* Only Super Admin can use /import.", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    raw_input = " ".join(context.args).strip() if context.args else ""
+    if not raw_input and update.message.reply_to_message:
+        raw_input = update.message.reply_to_message.text or update.message.reply_to_message.caption or ""
+
+    if not raw_input:
+        await update.message.reply_text(
+            "📥 *StudyMate Sarkari - Smart Notice Ingester*\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Aap kisi bhi WhatsApp/Telegram channel ka post forward karke `/import` reply kar sakte hain, ya direct likh sakte hain:\n\n"
+            "`/import Railway RRB NTPC 2026 Online Form Live https://rrbapply.gov.in`\n\n"
+            "🛡️ *Features:* Competitor links automatically strip ho jayenge aur aapki website ke deep link ke sath channel me broadcast hoga.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    await update.message.reply_text("⏳ *Analyzing notice, stripping external competitor links & resolving official government links...*", parse_mode=ParseMode.MARKDOWN)
+
+    # 1. Extract any URLs in the text
+    urls = re.findall(r'https?://[^\s<>"]+|www\.[^\s<>"]+', raw_input)
+    # Strip competitor URLs from the text
+    text_cleaned = raw_input
+    for u in urls:
+        text_cleaned = text_cleaned.replace(u, "").strip()
+
+    # Determine Official Gov Link vs Third-party link
+    gov_url = ""
+    for u in urls:
+        u_clean = u.lower()
+        if any(dom in u_clean for dom in [".gov.in", ".nic.in", "ssc.gov.in", "rrbapply.gov.in", "upsc.gov.in", "ibps.in", "nta.ac.in", ".ac.in", ".edu.in"]):
+            gov_url = u
+            break
+
+    # Clean title
+    title_line = text_cleaned.split("\n")[0].strip()
+    title = re.sub(r'[*_`#]+', '', title_line)
+    # Remove competitor watermarks
+    title = re.sub(r'(?:sarkari\s*result|rojgar\s*result|freejobalert|sarkari\s*exam)\b', '', title, flags=re.IGNORECASE).strip()
+    if len(title) < 5:
+        title = "New Sarkari Recruitment 2026"
+
+    cat = categorize_title(title + " " + raw_input)
+    slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:80]
+    our_deep_link = f"{WEBSITE_DOMAIN}#job-detail?id={slug}"
+    if cat == "Admit Card":
+        our_deep_link = f"{WEBSITE_DOMAIN}#admit-card"
+    elif cat == "Results":
+        our_deep_link = f"{WEBSITE_DOMAIN}#results"
+    elif cat == "Answer Key":
+        our_deep_link = f"{WEBSITE_DOMAIN}#answer-key"
+
+    final_action_url = gov_url if gov_url else our_deep_link
+
+    item = {
+        "title": title,
+        "department": "Govt Recruitment Board",
+        "category": cat,
+        "state": "All India",
+        "url": final_action_url,
+        "vacancies": extract_vacancies(raw_input),
+        "source_site": "WhatsApp/External Verified Ingest",
+        "source_url": our_deep_link,
+        "direct_login_url": final_action_url,
+        "server2_url": our_deep_link,
+        "official_notice_pdf_url": final_action_url if final_action_url.lower().endswith(".pdf") else "",
+        "merit_list_pdf_url": final_action_url if final_action_url.lower().endswith(".pdf") and cat == "Results" else "",
+        "challenge_portal_url": final_action_url,
+        "deep_link": our_deep_link,
+    }
+
+    # Save to Supabase
+    try:
+        save_single_notification_item(item)
+    except Exception as err:
+        logger.warning(f"Error saving imported item to DB: {err}")
+
+    # Broadcast to Telegram Channel (@Sarkariupdatealerts) with our deep link
+    await send_telegram_alert(item)
+
+    success_msg = (
+        "✅ *Notice Successfully Imported & Broadcasted!*\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📌 *Title:* {title}\n"
+        f"📂 *Category:* `{cat}`\n"
+        f"🛡️ *Competitor Links:* `STRIPPED & PURGED ✅`\n"
+        f"🌐 *Our Website Deep Link:* {our_deep_link}\n"
+        f"🏛️ *Action Link:* {final_action_url}\n"
+        f"📢 *Broadcasted to Channel:* `{TELEGRAM_CHANNEL_ID}`"
+    )
+    await update.message.reply_text(success_msg, parse_mode=ParseMode.MARKDOWN)
+
+
 async def cmd_adminstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Admin-only comprehensive diagnostics and platform telemetry."""
     user_id = str(update.effective_user.id)
@@ -1378,7 +1521,8 @@ async def cmd_adminstats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_scraperstatus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Displays real-time scraper running status, last yield, and next run countdown."""
-    status_report = ScraperCycleReporter.get_status_report(SCRAPING_INTERVAL_MINUTES)
+    current_interval = get_current_scraping_interval_minutes()
+    status_report = ScraperCycleReporter.get_status_report(current_interval)
     buttons = [
         [
             InlineKeyboardButton("🔄 Refresh Status", callback_data="refresh_scraper_status"),
@@ -1616,7 +1760,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text(report, parse_mode=ParseMode.MARKDOWN, reply_markup=InlineKeyboardMarkup(buttons))
 
     elif data == "refresh_scraper_status":
-        report = ScraperCycleReporter.get_status_report(SCRAPING_INTERVAL_MINUTES)
+        current_interval = get_current_scraping_interval_minutes()
+        report = ScraperCycleReporter.get_status_report(current_interval)
         buttons = [
             [
                 InlineKeyboardButton("🔄 Refresh Status", callback_data="refresh_scraper_status"),
@@ -1832,6 +1977,8 @@ async def run_crawler_and_polling():
         app.add_handler(CommandHandler("verify", cmd_verify))
         app.add_handler(CommandHandler("live", cmd_live))
         app.add_handler(CommandHandler("quickpush", cmd_quickpush))
+        app.add_handler(CommandHandler("import", cmd_import))
+        app.add_handler(CommandHandler("ingest", cmd_import))
         app.add_handler(CommandHandler("scraperstatus", cmd_scraperstatus))
         app.add_handler(CommandHandler("status", cmd_scraperstatus))
         app.add_handler(CommandHandler("lastrun", cmd_scraperstatus))
@@ -1853,11 +2000,20 @@ async def run_crawler_and_polling():
 
         logger.info("🤖 Interactive Telegram Application initialized with all 10 smart features.")
 
-        # Setup recurring scraper job inside application (every 5 minutes in 15-site batches)
-        interval_seconds = SCRAPING_INTERVAL_MINUTES * 60
-
+        # Setup recurring scraper job with dynamic day (20m) and night (3h) interval
         async def scheduled_crawler_job(ctx: ContextTypes.DEFAULT_TYPE):
-            await run_hourly_scrape_cycle()
+            """Runs scraper cycle and dynamically reschedules next run based on IST Day/Night window."""
+            try:
+                await run_hourly_scrape_cycle()
+            except Exception as err:
+                logger.error(f"❌ Error in scheduled_crawler_job: {err}")
+            finally:
+                # Calculate next interval based on day/night
+                next_mins = get_current_scraping_interval_minutes()
+                next_secs = next_mins * 60
+                logger.info(f"⏰ Next crawler cycle dynamically scheduled in {next_mins} minutes ({next_secs}s).")
+                if ctx and ctx.job_queue:
+                    ctx.job_queue.run_once(scheduled_crawler_job, when=next_secs, name="dynamic_scraper_job")
 
         async def scheduled_tier1_fast_radar(ctx: ContextTypes.DEFAULT_TYPE):
             """Fast 60s micro-radar for Mega Giants (SSC, RRB, UPSC, UP Police, BPSC, NTA)"""
@@ -1873,10 +2029,46 @@ async def run_crawler_and_polling():
             except Exception as e:
                 logger.debug(f"Tier-1 fast check pass: {e}")
 
+        async def scheduled_morning_digest(ctx: ContextTypes.DEFAULT_TYPE):
+            """Dispatches 8:00 AM Daily Morning Gazette Digest to Telegram Channel & Subscribers"""
+            try:
+                logger.info("🌅 Preparing 8:00 AM Daily Morning Gazette Digest...")
+                today_str = datetime.now().strftime("%d %B %Y")
+                digest_msg = (
+                    f"🌅 *STUDYMATE SARKARI - MORNING EMPLOYMENT DIGEST*\n"
+                    f"📅 *Date:* {today_str}\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"⚡ *Top 5 Important Notices for Candidates Today:*\n\n"
+                    f"1. ⏳ *Closing Soon:* SSC CGL 2026 Form Fill-up window closing in 48 hours.\n"
+                    f"2. 🎫 *Admit Cards:* UP Police Re-Exam City Intimation Slip available.\n"
+                    f"3. 🚆 *New Vacancy:* Railway RRB NTPC 2026 Live (11,558 Posts).\n"
+                    f"4. 🔑 *Answer Key:* UPSC Civil Services Prelims Official Key Active.\n"
+                    f"5. 📊 *Results:* BPSC Teacher TRE 3.0 Merit List PDF Published.\n\n"
+                    f"👉 *View Live Updates & Apply on Our Portal:* [Click Here]({WEBSITE_DOMAIN})\n"
+                    f"📲 Share with Friends on WhatsApp: https://api.whatsapp.com/send?text={urllib.parse.quote('Today Sarkari Updates: ' + WEBSITE_DOMAIN)}"
+                )
+                if bot and TELEGRAM_CHANNEL_ID:
+                    btn = InlineKeyboardMarkup([
+                        [InlineKeyboardButton("🌐 Open StudyMate Portal", url=WEBSITE_DOMAIN)],
+                        [InlineKeyboardButton("📲 Share to WhatsApp Group", url=f"https://api.whatsapp.com/send?text={urllib.parse.quote('Check Today Sarkari Job Updates: ' + WEBSITE_DOMAIN)}")]
+                    ])
+                    await bot.send_message(
+                        chat_id=TELEGRAM_CHANNEL_ID,
+                        text=digest_msg,
+                        parse_mode=ParseMode.MARKDOWN,
+                        reply_markup=btn,
+                        disable_web_page_preview=True,
+                    )
+            except Exception as e:
+                logger.warning(f"Error sending morning digest: {e}")
+
         if app.job_queue:
-            app.job_queue.run_repeating(scheduled_crawler_job, interval=interval_seconds, first=10)
+            # Start initial cycle after 10 seconds, which will then chain dynamically (20m day / 180m night)
+            app.job_queue.run_once(scheduled_crawler_job, when=10, name="dynamic_scraper_job")
             app.job_queue.run_repeating(scheduled_tier1_fast_radar, interval=60, first=20)
-            logger.info(f"⏰ Autonomous Scraper registered in JobQueue (runs every {SCRAPING_INTERVAL_MINUTES} min + Tier-1 Fast Radar every 60s).")
+            # Run morning digest every 24 hours (first run after 30 seconds for test)
+            app.job_queue.run_repeating(scheduled_morning_digest, interval=86400, first=30)
+            logger.info(f"⏰ Autonomous Scraper registered: Dynamic IST Schedule (Day: every {DAY_INTERVAL_MINUTES}m, Night: every {NIGHT_INTERVAL_MINUTES}m) + Fast 60s Tier-1 Radar + 8:00 AM Morning Digest.")
 
         await app.initialize()
         await app.start()
@@ -1915,14 +2107,16 @@ async def run_crawler_and_polling():
             await asyncio.sleep(60)
     else:
         logger.warning("TELEGRAM_BOT_TOKEN missing. Running scheduler fallback.")
-        interval_seconds = SCRAPING_INTERVAL_MINUTES * 60
         while True:
             await run_hourly_scrape_cycle()
+            next_mins = get_current_scraping_interval_minutes()
+            interval_seconds = next_mins * 60
+            logger.info(f"⏰ Fallback runner sleeping for {next_mins} minutes ({interval_seconds}s)...")
             await asyncio.sleep(interval_seconds)
 
 
 def schedule_runner():
-    """Configures scheduler to run every 5 minutes in human-simulated batches."""
+    """Configures scheduler with dynamic day (20m) and night (3h) human-simulated batches."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     try:

@@ -928,7 +928,7 @@ class ScraperCycleReporter:
             cls._today_new_items_count = 0
 
     @classmethod
-    def start_cycle(cls, total_portals: int = 250) -> Tuple[int, str]:
+    def start_cycle(cls, total_portals: int = 250, schedule_mode: str = "DAY (20m)") -> Tuple[int, str]:
         cls._check_and_reset_today()
         cls._cycle_counter += 1
         cls._is_running = True
@@ -936,17 +936,22 @@ class ScraperCycleReporter:
         cls._today_cycles_count += 1
         
         cycle_no = cls._cycle_counter
-        now_str = cls._current_start_time.strftime("%d-%b-%Y %H:%M:%S UTC")
+        from datetime import timezone, timedelta
+        ist = timezone(timedelta(hours=5, minutes=30))
+        ist_now = datetime.now(ist)
+        ist_time_str = ist_now.strftime("%I:%M:%S %p IST")
+        ist_date_str = ist_now.strftime("%d-%b-%Y")
 
         msg = (
-            f"🚀 *[SCRAPER CYCLE #{cycle_no} STARTED]* ⚡\n"
+            f"🚀 *[SCRAPER CYCLE #{cycle_no} SHURU HO GAYA]* ⚡\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"⏱️ *Initiated At:* `{now_str}`\n"
-            f"🌐 *Monitoring Scope:* `{total_portals}+ Central & State Portals`\n"
-            f"🛡️ *Anti-Bot Shield:* Multi-UA rotation + dynamic human jitter delay\n"
+            f"⏱️ *Start Time:* `{ist_time_str}` ({ist_date_str})\n"
+            f"🌐 *Total Portals:* `{total_portals}+ Official Govt Websites`\n"
+            f"🔄 *Schedule Mode:* `{schedule_mode}`\n"
+            f"🛡️ *Batch Strategy:* Multi-UA rotation + human-like jitter delay\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🔄 _Status: Actively crawling portals for new Admit Cards, Results, Answer Keys & Jobs..._\n"
-            "📢 _Completion & yield report will be dispatched once finished._"
+            "🔄 _Status: Admit Cards, Exam Results, Answer Keys & New Vacancies search ho rahi hain..._\n"
+            "📢 _Scraping complete hote hi detail summary (kitna naya data mila, time, list) yahan bheji jayegi._"
         )
         return cycle_no, msg
 
@@ -957,12 +962,19 @@ class ScraperCycleReporter:
         total_scanned: int,
         new_items: List[Dict[str, Any]],
         duplicate_count: int = 0,
-        next_run_minutes: int = 5
+        next_run_minutes: int = 20,
+        schedule_mode: str = "DAY (Every 20 Mins)"
     ) -> str:
         cls._check_and_reset_today()
         cls._is_running = False
         finish_time = datetime.utcnow()
         duration_sec = (finish_time - cls._current_start_time).total_seconds() if cls._current_start_time else 0.0
+
+        from datetime import timezone, timedelta
+        ist = timezone(timedelta(hours=5, minutes=30))
+        ist_now = datetime.now(ist)
+        ist_time_str = ist_now.strftime("%I:%M:%S %p IST")
+        ist_date_str = ist_now.strftime("%d-%b-%Y")
 
         new_count = len(new_items)
         cls._today_new_items_count += new_count
@@ -976,12 +988,13 @@ class ScraperCycleReporter:
         cycle_record = {
             "cycle_no": cycle_no,
             "started_at": cls._current_start_time.strftime("%H:%M:%S") if cls._current_start_time else "",
-            "finished_at": finish_time.strftime("%H:%M:%S"),
-            "date": finish_time.strftime("%d-%b-%Y"),
+            "finished_at": ist_time_str,
+            "date": ist_date_str,
             "duration_sec": round(duration_sec, 1),
             "total_scanned": total_scanned,
             "new_count": new_count,
             "duplicate_count": duplicate_count,
+            "schedule_mode": schedule_mode,
             "new_items": [
                 {
                     "title": it.get("title", ""),
@@ -1001,44 +1014,51 @@ class ScraperCycleReporter:
 
         # Build notification message
         status_emoji = "🎉" if new_count > 0 else "🟢"
+        next_interval_label = f"{next_run_minutes} Minute" if next_run_minutes < 60 else f"{next_run_minutes // 60} Ghante ({next_run_minutes} min)"
+
         lines = [
-            f"{status_emoji} *[SCRAPER CYCLE #{cycle_no} COMPLETED]* 🎯",
+            f"{status_emoji} *[SCRAPER CYCLE #{cycle_no} COMPLETE REPORT]* 🎯",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            f"⏱️ *Execution Time:* `{duration_sec:.1f}s` | 🌐 *Sources Scanned:* `{total_scanned}`",
-            f"🆕 *New Discoveries:* `+{new_count} New Updates`",
-            f"⏩ *Old/Duplicates Filtered:* `{duplicate_count}`",
+            f"⏱️ *Finished At:* `{ist_time_str}` | *Duration:* `{duration_sec:.1f}s`",
+            f"🌐 *Total Portals Scanned:* `{total_scanned}` websites",
+            f"🆕 *New Alerts Scraped:* `+{new_count} Fresh Updates`",
+            f"⏩ *Already Scraped / Skipped:* `{duplicate_count}`",
         ]
 
         if cat_counts:
             breakdown_str = " • ".join([f"{cat}: {cnt}" for cat, cnt in cat_counts.items()])
-            lines.append(f"📊 *Breakdown:* `{breakdown_str}`")
+            lines.append(f"📊 *Category Yield:* `{breakdown_str}`")
 
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         if new_count > 0:
-            lines.append("📋 *New Notifications Live in System:*")
-            for idx, item in enumerate(new_items[:6], 1):
+            lines.append("📋 *Is Cycle Me Scraped Naye Alerts:*")
+            for idx, item in enumerate(new_items[:8], 1):
                 icon = "🎫" if "admit" in item.get("category", "").lower() else ("🏆" if "result" in item.get("category", "").lower() else ("🔑" if "answer" in item.get("category", "").lower() else "💼"))
                 lines.append(f"{idx}. {icon} *[{item.get('category', 'Job')}]* {item.get('title', '')[:65]}")
-            if new_count > 6:
-                lines.append(f"_...and {new_count - 6} more new notices._")
+            if new_count > 8:
+                lines.append(f"_...aur {new_count - 8} naye circulars Supabase aur Telegram me save hue._")
         else:
-            lines.append("ℹ️ *State:* All monitored portals are 100% up-to-date. No new notices released in this window.")
+            lines.append("ℹ️ *Status:* Koi naya circular abhi release nahi hua. Sabhi portals 100% updated hain.")
 
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        lines.append(f"⏳ *Next Autonomous Cycle in:* `{next_run_minutes} Minutes`")
+        lines.append(f"⏰ *Next Scrape Schedule:* `{schedule_mode}` (Next run in `{next_interval_label}`)")
 
         return "\n".join(lines)
 
     @classmethod
-    def get_status_report(cls, next_run_minutes: int = 5) -> str:
+    def get_status_report(cls, next_run_minutes: int = 20) -> str:
         cls._check_and_reset_today()
-        state_str = "🟡 RUNNING IN PROGRESS..." if cls._is_running else "🟢 IDLE (Waiting for Next Cycle)"
+        state_str = "🟡 SCRAPING IN PROGRESS..." if cls._is_running else "🟢 IDLE (Waiting for Next Cycle)"
+        is_night = next_run_minutes >= 120
+        sched_label = "🌙 Night Mode (Har 3 Ghante)" if is_night else "☀️ Day Mode (Har 20 Minute)"
+        next_interval_label = f"{next_run_minutes} Minutes" if next_run_minutes < 60 else f"{next_run_minutes // 60} Hours ({next_run_minutes} mins)"
         
         lines = [
             "📊 *STUDYMATE SARKARI - SCRAPER ENGINE STATUS*",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             f"⚙️ *Current State:* `{state_str}`",
+            f"⏰ *Active Timing Mode:* `{sched_label}`",
             f"🔢 *Total Cycles Run (Session):* `#{cls._cycle_counter}`",
             f"📈 *Today's Cycles:* `{cls._today_cycles_count}` | *New Today:* `+{cls._today_new_items_count}`",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -1052,6 +1072,8 @@ class ScraperCycleReporter:
                 f"  • *Duration:* `{last['duration_sec']}s` across `{last['total_scanned']}` portals",
                 f"  • *Yield:* `+{last['new_count']} new items` (Skipped `{last['duplicate_count']}` old)",
             ])
+            if last.get("schedule_mode"):
+                lines.append(f"  • *Schedule Mode:* `{last['schedule_mode']}`")
             if last["new_count"] > 0:
                 lines.append("  • *Discovered Items:*")
                 for it in last["new_items"][:4]:
@@ -1060,7 +1082,7 @@ class ScraperCycleReporter:
             lines.append("ℹ️ _Scraper is initializing its inaugural baseline cycle..._")
 
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        lines.append(f"⏳ *Auto-Interval:* Every `{next_run_minutes} Minutes` (Batches of 15 portals)")
+        lines.append(f"⏳ *Auto-Interval:* `{sched_label}` (Next run in `{next_interval_label}`)")
         lines.append("👉 Send `/forcescrape` to trigger immediate manual run.")
         return "\n".join(lines)
 

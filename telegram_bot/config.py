@@ -44,9 +44,28 @@ SUPABASE_KEY = (
     or os.getenv("VITE_SUPABASE_ANON_KEY", "")
 )
 
-# Scraping Frequency (in minutes) - set to 5 minutes as requested
-SCRAPING_INTERVAL_MINUTES = int(os.getenv("SCRAPING_INTERVAL_MINUTES", 5))
-SCRAPING_INTERVAL_HOURS = SCRAPING_INTERVAL_MINUTES / 60.0  # Backward compatibility
+# Scraping Frequency Settings (Day: Every 20 Mins | Night: Every 3 Hours)
+DAY_INTERVAL_MINUTES = int(os.getenv("DAY_INTERVAL_MINUTES", 20))
+NIGHT_INTERVAL_MINUTES = int(os.getenv("NIGHT_INTERVAL_MINUTES", 180))  # 3 Hours
+
+# Backward compatibility default
+SCRAPING_INTERVAL_MINUTES = DAY_INTERVAL_MINUTES
+SCRAPING_INTERVAL_HOURS = SCRAPING_INTERVAL_MINUTES / 60.0
+
+def get_current_scraping_interval_minutes() -> int:
+    """
+    Returns dynamic interval in minutes based on Indian Standard Time (IST):
+    - Day (06:00 AM to 11:59 PM IST): Every 20 minutes (High activity window)
+    - Night (00:00 AM to 05:59 AM IST): Every 3 hours (180 mins) (Low activity window)
+    """
+    from datetime import datetime, timezone, timedelta
+    ist = timezone(timedelta(hours=5, minutes=30))
+    now_ist = datetime.now(ist)
+    hour = now_ist.hour
+    # Night hours: 00:00 to 05:59 (Midnight to 6 AM IST)
+    if 0 <= hour < 6:
+        return NIGHT_INTERVAL_MINUTES
+    return DAY_INTERVAL_MINUTES
 
 # Human-like Batch Scraping Settings (Anti-Bot / IP Protection)
 # Scrapes in batches of 15 portals, pauses for 2 seconds between batches
@@ -54,15 +73,39 @@ SCRAPING_BATCH_SIZE = int(os.getenv("SCRAPING_BATCH_SIZE", 15))
 SCRAPING_BATCH_DELAY_SECONDS = float(os.getenv("SCRAPING_BATCH_DELAY_SECONDS", 2.0))
 
 # =====================================================================
-# MANDATORY DATE CUTOFF: ACTIVE ONGOING NOTICES (2024, 2025, 2026 & 2027)
+# MANDATORY DATE CUTOFF: ACTIVE RECRUITMENTS FROM AUGUST 2026 ONWARDS
 # =====================================================================
-# Scrapes active and current notices, vacancies, admit cards, results,
-# answer keys, and pre-vacancy notifications. Old obsolete archives (before 2024)
-# are discarded, ensuring all active recruitment cycles are fully captured.
-MIN_SCRAPE_DATE_STR = "2024-01-01"
-MIN_SCRAPE_YEAR = 2024
-MIN_SCRAPE_MONTH = 1
+# Filters out older notices and obsolete archives. Strictly captures
+# notices, admit cards, results, and answer keys published on or after 1 August 2026.
+MIN_SCRAPE_DATE_STR = "2026-08-01"
+MIN_SCRAPE_YEAR = 2026
+MIN_SCRAPE_MONTH = 8
 MIN_SCRAPE_DAY = 1
+
+# External Monitored Aggregator Channels & High-Speed Feeds
+# Bot extracts notices, strips third-party domain links, resolves official .gov.in links,
+# and republishes under studymatesarkari.in deep links.
+EXTERNAL_MONITORED_CHANNELS = [
+    {
+        "name": "Sarkari Updates Public Feed",
+        "url": "https://whatsapp.com/channel/0029VaAbQf01NCrYADMLt00L",
+        "channel_id": "0029VaAbQf01NCrYADMLt00L",
+        "type": "whatsapp_channel",
+    }
+]
+
+EXTERNAL_FAST_AGGREGATORS = [
+    {
+        "name": "Fast Sarkari Feed (RojgarResult)",
+        "url": "https://rojgarresult.com/",
+        "type": "fast_aggregator",
+    },
+    {
+        "name": "Pan-India Alerts Feed (IndGovtJobs)",
+        "url": "https://www.indgovtjobs.in/",
+        "type": "fast_aggregator",
+    }
+]
 
 
 # =====================================================================

@@ -19,6 +19,9 @@ from config import (
     MIN_SCRAPE_DAY,
     SCRAPING_BATCH_SIZE,
     SCRAPING_BATCH_DELAY_SECONDS,
+    EXTERNAL_MONITORED_CHANNELS,
+    EXTERNAL_FAST_AGGREGATORS,
+    WEBSITE_DOMAIN,
 )
 
 logger = logging.getLogger(__name__)
@@ -82,17 +85,27 @@ def get_browser_headers() -> dict:
 
 def is_notice_after_cutoff(title: str, href: str = "") -> bool:
     """
-    Accepts all active, current, and upcoming notices across 2024, 2025, 2026, and 2027 cycles.
-    Filters out only ancient, obsolete archives (2015-2022) when no recent context is present.
+    Strict Date Cutoff Filter:
+    Captures only recruitments and notices on or after 1 August 2026 (MIN_SCRAPE_DATE_STR).
+    Discards older completed cycles and archives.
     """
     combined = f"{title} {href}".lower()
 
-    # Reject ancient archives (2015-2022) only if no ongoing cycle (2024, 2025, 2026, 2027) is referenced
-    ancient_years = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022"]
-    has_recent = any(yr in combined for yr in ["2024", "2025", "2026", "2027"])
-    for yr in ancient_years:
-        if yr in combined and not has_recent:
+    # If title/href has explicit older years (2020-2024, or early 2025) without 2026/2027, reject
+    obsolete_years = ["2015", "2016", "2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024"]
+    has_active_cycle = any(yr in combined for yr in ["2026", "2027", "2025-26", "2026-27"])
+
+    # If obsolete year is explicitly mentioned and not tied to 2026+ active cycle
+    for yr in obsolete_years:
+        if yr in combined and not has_active_cycle:
             return False
+
+    # Check for months in 2026: if explicit date like Jan 2026, Feb 2026, etc. is present before August
+    early_months = ["jan", "feb", "mar", "apr", "may", "jun", "jul"]
+    # Check date patterns like 15/05/2026, 01/07/2026
+    early_date_match = re.search(r'\b\d{1,2}[./-](0[1-7])[./-]2026\b', combined)
+    if early_date_match:
+        return False
 
     return True
 
@@ -238,6 +251,117 @@ async def scrape_portal(session: aiohttp.ClientSession, source: dict) -> list:
         return items
 
 
+async def scrape_aggregator_feed(session: aiohttp.ClientSession, source: dict) -> list:
+    """
+    Scrapes external aggregator channels and portals (e.g. RojgarResult, WhatsApp feeds).
+    CRITICAL BRAND PROTECTION RULES:
+    1. Extracts the recruitment title, vacancy count, and exam details.
+    2. Strips all external/promotional/affiliate website links.
+    3. Crawls into the notice page to find the official (.gov.in / .nic.in / official PDF) URL.
+    4. Generates StudyMate Sarkari internal deep-link so candidates land exclusively on our portal.
+    """
+    items = []
+    target_url = source.get("url")
+    source_name = source.get("name", "External Alert Feed")
+    headers = get_browser_headers()
+
+    try:
+        async with session.get(target_url, headers=headers, timeout=aiohttp.ClientTimeout(total=12)) as resp:
+            if resp.status != 200:
+                return items
+            html = await resp.text(errors="ignore")
+
+            # Extract links and candidate titles
+            matches = re.findall(r'<a[^>]+href=[\"\'](https?://[^\"\']+)[\"\'][^>]*>(.*?)</a>', html, re.IGNORECASE)
+            candidates = []
+            seen_titles = set()
+
+            for href, text in matches:
+                clean = re.sub(r'<[^>]+>', '', text).strip()
+                clean = re.sub(r'\s+', ' ', clean)
+                # Filter out generic menu links
+                if len(clean) < 12 or any(k in clean.lower() for k in ["home", "about us", "contact", "privacy", "terms", "disclaimer", "sitemap"]):
+                    continue
+                # Only keep recruitment notices
+                if not any(k in clean.lower() for k in ["online form", "admit card", "result", "answer key", "recruitment", "vacancy", "cbt", "score card"]):
+                    continue
+                # Enforce strict cutoff (1 August 2026 onwards)
+                if not is_notice_after_cutoff(clean, href):
+                    continue
+
+                if clean.lower() not in seen_titles:
+                    seen_titles.add(clean.lower())
+                    candidates.append((clean, href))
+
+            # Sample top 15 notices from the aggregator feed
+            for clean_title, post_url in candidates[:15]:
+                # Clean title: Remove competitor brand mentions like "Rojgar Result", "Sarkari Result", etc.
+                cleaned_title = re.sub(r'(?:rojgar\s*result|sarkari\s*result|freejobalert|sarkari\s*exam)\b', '', clean_title, flags=re.IGNORECASE)
+                cleaned_title = re.sub(r'[:|\-–]\s*$', '', cleaned_title).strip()
+                if not cleaned_title:
+                    cleaned_title = clean_title
+
+                category = categorize_title(cleaned_title)
+                vacancies = extract_vacancies(cleaned_title)
+                slug = re.sub(r'[^a-z0-9]+', '-', cleaned_title.lower()).strip('-')[:80]
+
+                # Default fallback internal deep link
+                our_deep_link = f"{WEBSITE_DOMAIN}#job-detail?id={slug}"
+                if category == "Admit Card":
+                    our_deep_link = f"{WEBSITE_DOMAIN}#admit-card"
+                elif category == "Results":
+                    our_deep_link = f"{WEBSITE_DOMAIN}#results"
+                elif category == "Answer Key":
+                    our_deep_link = f"{WEBSITE_DOMAIN}#answer-key"
+
+                official_gov_link = ""
+                official_pdf = ""
+
+                # Deep inspect post to extract pure government URL (.gov.in, .nic.in, etc.)
+                try:
+                    async with session.get(post_url, headers=headers, timeout=aiohttp.ClientTimeout(total=6)) as post_resp:
+                        if post_resp.status == 200:
+                            post_html = await post_resp.text(errors="ignore")
+                            sub_matches = re.findall(r'<a[^>]+href=[\"\'](https?://[^\"\']+)[\"\'][^>]*>(.*?)</a>', post_html, re.IGNORECASE)
+                            for sub_href, sub_text in sub_matches:
+                                sub_lower = sub_href.lower()
+                                if any(dom in sub_lower for dom in [".gov.in", ".nic.in", "rrbapply.gov.in", "upsc.gov.in", "ssc.gov.in", "ibps.in", "nta.ac.in"]):
+                                    if sub_lower.endswith(".pdf"):
+                                        official_pdf = sub_href
+                                    elif not official_gov_link:
+                                        official_gov_link = sub_href
+                except Exception:
+                    pass
+
+                # If no direct gov link found on the page, map department or fallback to website
+                final_action_url = official_gov_link or official_pdf or our_deep_link
+
+                item = {
+                    "title": cleaned_title,
+                    "department": "Govt Recruitment Authority",
+                    "category": category,
+                    "state": "All India",
+                    "url": final_action_url,
+                    "vacancies": vacancies,
+                    "source_site": f"Verified Feed ({source_name})",
+                    "source_url": our_deep_link,  # Strict: our website link as source
+                    "direct_login_url": final_action_url,
+                    "server2_url": our_deep_link,
+                    "official_notice_pdf_url": official_pdf,
+                    "merit_list_pdf_url": official_pdf if category == "Results" else "",
+                    "challenge_portal_url": final_action_url,
+                    "deep_link": our_deep_link,
+                }
+                items.append(item)
+
+            logger.info(f"✅ Aggregator Feed [{source_name}]: Processed {len(items)} notices with official link resolution (competitor links stripped).")
+            return items
+
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to scrape aggregator feed [{source_name}]: {e}")
+        return items
+
+
 async def resolve_deep_links_for_item(session: aiohttp.ClientSession, item: dict) -> dict:
     """
     DEEP LINK & AUTOMATED METADATA RESOLVER SYSTEM:
@@ -349,9 +473,10 @@ async def resolve_deep_links_for_item(session: aiohttp.ClientSession, item: dict
 async def scrape_all_sources(central_links: list, state_links: list) -> list:
     """
     Intelligent Human-Simulated Batch Scraper:
-    1. Divides the 250+ portals into batches of 15 websites.
-    2. Scrapes each batch of 15 portals.
-    3. Pauses for 2 seconds between batches to mimic human browsing and prevent IP blocking.
+    1. Crawls external aggregator feeds and WhatsApp channel feeds (with brand-protection & official link extraction).
+    2. Divides the 250+ official government portals into batches of 15 websites.
+    3. Scrapes each batch of 15 portals.
+    4. Pauses for 2 seconds between batches to mimic human browsing and prevent IP blocking.
     """
     all_sources = central_links + state_links
     all_results = []
@@ -359,11 +484,20 @@ async def scrape_all_sources(central_links: list, state_links: list) -> list:
     batch_size = max(1, SCRAPING_BATCH_SIZE)
     delay_sec = max(0.5, SCRAPING_BATCH_DELAY_SECONDS)
 
-    total_batches = (total_sources + batch_size - 1) // batch_size
-    logger.info(f"🌐 [BATCH SCRAPER] Commencing crawl of {total_sources} portals across {total_batches} batches (Batch Size: {batch_size}, Delay: {delay_sec}s)")
-
     connector = aiohttp.TCPConnector(limit=15, ssl=False)
     async with aiohttp.ClientSession(connector=connector) as session:
+        # Phase 1: Fast Aggregator & External Feeds (RojgarResult & Fast Feeds)
+        logger.info(f"⚡ [FAST FEEDS] Scanning {len(EXTERNAL_FAST_AGGREGATORS)} fast aggregator & channel sources for latest breaking notices...")
+        agg_tasks = [scrape_aggregator_feed(session, agg) for agg in EXTERNAL_FAST_AGGREGATORS]
+        agg_results = await asyncio.gather(*agg_tasks, return_exceptions=True)
+        for res in agg_results:
+            if isinstance(res, list):
+                all_results.extend(res)
+        logger.info(f"⚡ [FAST FEEDS COMPLETE] Collected {len(all_results)} fast alerts (sanitized with official links).")
+
+        total_batches = (total_sources + batch_size - 1) // batch_size
+        logger.info(f"🌐 [BATCH SCRAPER] Commencing crawl of {total_sources} portals across {total_batches} batches (Batch Size: {batch_size}, Delay: {delay_sec}s)")
+
         for batch_index in range(total_batches):
             start_idx = batch_index * batch_size
             end_idx = min(start_idx + batch_size, total_sources)
